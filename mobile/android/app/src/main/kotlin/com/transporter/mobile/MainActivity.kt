@@ -1,4 +1,4 @@
-package com.example.transporter_mobile
+package com.transporter.mobile
 
 import io.flutter.embedding.android.FlutterActivity
 
