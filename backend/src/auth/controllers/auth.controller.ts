@@ -10,7 +10,11 @@ export class AuthController {
 
   @Public()
   @Post('request-otp')
-  requestOtp(@Body() body: RequestOtpDto): { requestId: string; expiresAt: Date; devCode: string } {
+  requestOtp(@Body() body: RequestOtpDto): Promise<{
+    requestId: string;
+    expiresAt: Date;
+    devCode?: string;
+  }> {
     return this.authService.requestOtp(body);
   }
 

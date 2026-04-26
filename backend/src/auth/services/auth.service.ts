@@ -16,7 +16,11 @@ export class AuthService {
     private readonly tokenService: TokenService
   ) {}
 
-  requestOtp(input: RequestOtpDto): { requestId: string; expiresAt: Date; devCode: string } {
+  async requestOtp(input: RequestOtpDto): Promise<{
+    requestId: string;
+    expiresAt: Date;
+    devCode?: string;
+  }> {
     return this.otpService.issue(input.phone);
   }
 
@@ -25,7 +29,7 @@ export class AuthService {
     tokenType: 'Bearer';
     user: ReturnType<UsersService['toPublicUser']>;
   }> {
-    this.otpService.validate(input.phone, input.code);
+    await this.otpService.validate(input.phone, input.code);
 
     let user = await this.usersService.findByPhone(input.phone);
 

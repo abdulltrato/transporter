@@ -6,14 +6,14 @@ import { OtpRecord, OtpStore } from '../store/otp.store';
 export interface IssuedOtp {
   requestId: string;
   expiresAt: Date;
-  devCode: string;
+  devCode?: string;
 }
 
 @Injectable()
 export class OtpService {
   constructor(private readonly otpStore: OtpStore) {}
 
-  issue(phone: string): IssuedOtp {
+  async issue(phone: string): Promise<IssuedOtp> {
     const code = randomInt(100000, 999999).toString();
     const expiresAt = new Date(Date.now() + getOtpTtlSeconds() * 1000);
 
@@ -25,29 +25,34 @@ export class OtpService {
       attempts: 0
     };
 
-    this.otpStore.upsert(record);
+    await this.otpStore.upsert(record);
 
-    return {
+    const issued: IssuedOtp = {
       requestId: record.requestId,
-      expiresAt: record.expiresAt,
-      devCode: code
+      expiresAt: record.expiresAt
     };
+
+    if (this.isDevModeEnabled()) {
+      issued.devCode = code;
+    }
+
+    return issued;
   }
 
-  validate(phone: string, code: string): void {
-    const record = this.otpStore.findByPhone(phone);
+  async validate(phone: string, code: string): Promise<void> {
+    const record = await this.otpStore.findByPhone(phone);
 
     if (!record) {
       throw new UnauthorizedException('OTP not requested for this phone number.');
     }
 
     if (record.expiresAt.getTime() < Date.now()) {
-      this.otpStore.remove(phone);
+      await this.otpStore.remove(phone);
       throw new UnauthorizedException('OTP expired. Request a new code.');
     }
 
     if (record.attempts >= 5) {
-      this.otpStore.remove(phone);
+      await this.otpStore.remove(phone);
       throw new UnauthorizedException('OTP retry limit reached. Request a new code.');
     }
 
@@ -55,14 +60,19 @@ export class OtpService {
     const isValid = record.codeHash === this.hash(phone, code);
 
     if (!isValid) {
-      this.otpStore.upsert(record);
+      await this.otpStore.upsert(record);
       throw new UnauthorizedException('Invalid OTP code.');
     }
 
-    this.otpStore.remove(phone);
+    await this.otpStore.remove(phone);
   }
 
   private hash(phone: string, code: string): string {
     return createHash('sha256').update(`${phone}:${code}`).digest('hex');
+  }
+
+  private isDevModeEnabled(): boolean {
+    const raw = process.env.OTP_DEV_MODE ?? 'true';
+    return raw.trim().toLowerCase() === 'true';
   }
 }
