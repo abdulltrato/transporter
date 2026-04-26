@@ -1,3 +1,4 @@
+/// Coordenada geográfica simples usada em toda a app.
 class GeoPoint {
   const GeoPoint({required this.lat, required this.lng});
 
@@ -7,14 +8,11 @@ class GeoPoint {
   factory GeoPoint.fromJson(Map<String, dynamic> json) {
     return GeoPoint(
       lat: (json['lat'] as num?)?.toDouble() ?? 0,
-      lng: (json['lng'] as num?)?.toDouble() ?? 0
+      lng: (json['lng'] as num?)?.toDouble() ?? 0,
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'lat': lat,
-      'lng': lng
-    };
+    return {'lat': lat, 'lng': lng};
   }
 }

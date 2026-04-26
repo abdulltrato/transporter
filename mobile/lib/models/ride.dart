@@ -1,5 +1,6 @@
 import 'geo_point.dart';
 
+/// Modelo de corrida usado pelos fluxos de cliente e taxista.
 class Ride {
   const Ride({
     required this.id,
@@ -9,7 +10,7 @@ class Ride {
     this.driverId,
     this.searchRadiusKm,
     this.rejectedDriverIds,
-    this.updatedAt
+    this.updatedAt,
   });
 
   final String id;
@@ -24,12 +25,12 @@ class Ride {
   factory Ride.fromJson(Map<String, dynamic> json) {
     final pickupPayload = json['pickup'] is Map
         ? (json['pickup'] as Map).map(
-            (key, value) => MapEntry(key.toString(), value)
+            (key, value) => MapEntry(key.toString(), value),
           )
         : const <String, dynamic>{};
     final dropoffPayload = json['dropoff'] is Map
         ? (json['dropoff'] as Map).map(
-            (key, value) => MapEntry(key.toString(), value)
+            (key, value) => MapEntry(key.toString(), value),
           )
         : null;
 
@@ -37,13 +38,15 @@ class Ride {
       id: (json['id'] ?? '').toString(),
       status: (json['status'] ?? '').toString(),
       pickup: GeoPoint.fromJson(pickupPayload),
-      dropoff: dropoffPayload == null ? null : GeoPoint.fromJson(dropoffPayload),
+      dropoff: dropoffPayload == null
+          ? null
+          : GeoPoint.fromJson(dropoffPayload),
       driverId: json['driverId']?.toString(),
       searchRadiusKm: (json['searchRadiusKm'] as num?)?.toDouble(),
       rejectedDriverIds: (json['rejectedDriverIds'] as List<dynamic>?)
           ?.map((item) => item.toString())
           .toList(),
-      updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? '')
+      updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? ''),
     );
   }
 
@@ -54,7 +57,7 @@ class Ride {
     String? driverId,
     double? searchRadiusKm,
     List<String>? rejectedDriverIds,
-    DateTime? updatedAt
+    DateTime? updatedAt,
   }) {
     return Ride(
       id: id,
@@ -64,7 +67,7 @@ class Ride {
       driverId: driverId ?? this.driverId,
       searchRadiusKm: searchRadiusKm ?? this.searchRadiusKm,
       rejectedDriverIds: rejectedDriverIds ?? this.rejectedDriverIds,
-      updatedAt: updatedAt ?? this.updatedAt
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 }

@@ -2,6 +2,7 @@ import '../models/geo_point.dart';
 import '../models/ride.dart';
 import 'api_client.dart';
 
+/// Ações de resposta disponíveis para o taxista.
 enum RideResponseAction {
   accept('accept'),
   reject('reject');
@@ -17,11 +18,11 @@ class RidesService {
 
   Future<Ride> requestRide({
     required GeoPoint pickup,
-    GeoPoint? dropoff
+    GeoPoint? dropoff,
   }) async {
     final payload = {
       'pickup': pickup.toJson(),
-      if (dropoff != null) 'dropoff': dropoff.toJson()
+      if (dropoff != null) 'dropoff': dropoff.toJson(),
     };
 
     final response = await _apiClient.post('/api/rides/request', payload);
@@ -45,11 +46,11 @@ class RidesService {
 
   Future<Ride> respondToRide({
     required String rideId,
-    required RideResponseAction action
+    required RideResponseAction action,
   }) async {
     final response = await _apiClient.patch(
       '/api/rides/$rideId/respond',
-      body: {'action': action.value}
+      body: {'action': action.value},
     );
     return Ride.fromJson(_asJsonMap(response));
   }
@@ -68,6 +69,7 @@ class RidesService {
   }
 }
 
+/// Converte payloads dinâmicos em mapas seguros para os modelos.
 Map<String, dynamic> _asJsonMap(dynamic value) {
   if (value is Map<String, dynamic>) {
     return value;

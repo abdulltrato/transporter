@@ -1,75 +1,92 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+/// Cliente HTTP simples para o MVP.
+///
+/// Mantém o contrato explícito e lança `HttpException` com mensagens legíveis
+/// para a UI quando a API devolve erros.
 class ApiClient {
-  ApiClient({required this.baseUrl, this.token});
+  ApiClient({
+    required this.baseUrl,
+    this.token,
+    this.requestTimeout = const Duration(seconds: 12),
+  });
 
   final String baseUrl;
+  final Duration requestTimeout;
   String? token;
 
   Future<dynamic> get(String path, {Map<String, dynamic>? query}) async {
     final uri = Uri.parse('$baseUrl$path').replace(
       queryParameters: query?.map(
-        (key, value) => MapEntry(key, value.toString())
-      )
+        (key, value) => MapEntry(key, value.toString()),
+      ),
     );
     final request = await HttpClient().getUrl(uri);
-    request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+    _setDefaultHeaders(request);
 
-    if (token != null) {
-      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    }
-
-    final response = await request.close();
+    final response = await _closeWithTimeout(request, uri);
     return _decodeResponse(response, uri);
   }
 
   Future<dynamic> post(String path, Map<String, dynamic> body) async {
     final uri = Uri.parse('$baseUrl$path');
     final request = await HttpClient().postUrl(uri);
-    request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
-
-    if (token != null) {
-      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    }
+    _setDefaultHeaders(request);
 
     request.write(jsonEncode(body));
-    final response = await request.close();
+    final response = await _closeWithTimeout(request, uri);
     return _decodeResponse(response, uri);
   }
 
   Future<dynamic> patch(String path, {Map<String, dynamic>? body}) async {
     final uri = Uri.parse('$baseUrl$path');
     final request = await HttpClient().patchUrl(uri);
-    request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
-
-    if (token != null) {
-      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    }
+    _setDefaultHeaders(request);
 
     if (body != null) {
       request.write(jsonEncode(body));
     }
 
-    final response = await request.close();
+    final response = await _closeWithTimeout(request, uri);
     return _decodeResponse(response, uri);
   }
 
   Future<dynamic> put(String path, {Map<String, dynamic>? body}) async {
     final uri = Uri.parse('$baseUrl$path');
     final request = await HttpClient().putUrl(uri);
-    request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
-
-    if (token != null) {
-      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    }
+    _setDefaultHeaders(request);
 
     if (body != null) {
       request.write(jsonEncode(body));
     }
 
-    final response = await request.close();
+    final response = await _closeWithTimeout(request, uri);
     return _decodeResponse(response, uri);
+  }
+
+  void _setDefaultHeaders(HttpClientRequest request) {
+    request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+
+    final authToken = token;
+    if (authToken != null) {
+      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+    }
+  }
+
+  Future<HttpClientResponse> _closeWithTimeout(
+    HttpClientRequest request,
+    Uri uri,
+  ) async {
+    try {
+      return await request.close().timeout(requestTimeout);
+    } on TimeoutException {
+      throw HttpException(
+        'Tempo limite excedido ao comunicar com o servidor.',
+        uri: uri,
+      );
+    }
   }
 
   Future<dynamic> _decodeResponse(HttpClientResponse response, Uri uri) async {
@@ -94,7 +111,7 @@ class ApiClient {
 
     throw HttpException(
       'Request failed with status ${response.statusCode}',
-      uri: uri
+      uri: uri,
     );
   }
 }

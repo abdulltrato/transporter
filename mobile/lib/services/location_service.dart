@@ -2,6 +2,7 @@ import '../models/driver.dart';
 import '../models/geo_point.dart';
 import 'api_client.dart';
 
+/// Serviço responsável por operações de localização no backend.
 class LocationService {
   LocationService(this._apiClient);
 
@@ -25,7 +26,7 @@ class LocationService {
   Future<GeoPoint> updateMyLocation(GeoPoint point) async {
     final response = await _apiClient.put(
       '/api/location/me',
-      body: point.toJson()
+      body: point.toJson(),
     );
     final payload = _asJsonMap(response);
     if (payload == null) {
@@ -40,12 +41,14 @@ class LocationService {
     return GeoPoint.fromJson(coordinates);
   }
 
-  Future<List<Driver>> loadNearbyDrivers(GeoPoint point, {double radiusKm = 2}) async {
-    final response = await _apiClient.get('/api/location/drivers/nearby', query: {
-      'lat': point.lat,
-      'lng': point.lng,
-      'radiusKm': radiusKm
-    });
+  Future<List<Driver>> loadNearbyDrivers(
+    GeoPoint point, {
+    double radiusKm = 2,
+  }) async {
+    final response = await _apiClient.get(
+      '/api/location/drivers/nearby',
+      query: {'lat': point.lat, 'lng': point.lng, 'radiusKm': radiusKm},
+    );
 
     if (response is! List<dynamic>) {
       return [];
@@ -58,6 +61,7 @@ class LocationService {
   }
 }
 
+/// Normaliza cargas JSON dinâmicas para `Map<String, dynamic>`.
 Map<String, dynamic>? _asJsonMap(dynamic value) {
   if (value is Map<String, dynamic>) {
     return value;

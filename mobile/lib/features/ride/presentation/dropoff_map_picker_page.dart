@@ -5,8 +5,11 @@ import 'package:latlong2/latlong.dart';
 import '../../../models/geo_point.dart';
 
 class DropoffMapPickerPage extends StatefulWidget {
-  const DropoffMapPickerPage(
-      {super.key, required this.pickup, this.initialDropoff});
+  const DropoffMapPickerPage({
+    super.key,
+    required this.pickup,
+    this.initialDropoff,
+  });
 
   final GeoPoint pickup;
   final GeoPoint? initialDropoff;
@@ -36,19 +39,23 @@ class _DropoffMapPickerPageState extends State<DropoffMapPickerPage> {
     final initialCenter = selectedDropoff ?? pickup;
 
     return Scaffold(
-        appBar: AppBar(title: const Text('Selecionar dropoff no mapa')),
-        body: Column(children: [
+      appBar: AppBar(title: const Text('Selecionar dropoff no mapa')),
+      body: Column(
+        children: [
           Expanded(
-              child: Stack(children: [
-            FlutterMap(
-                mapController: _mapController,
-                options: MapOptions(
+            child: Stack(
+              children: [
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
                     initialCenter: LatLng(initialCenter.lat, initialCenter.lng),
                     initialZoom: 16,
                     onTap: (_, point) {
                       setState(() {
-                        _selectedDropoff =
-                            GeoPoint(lat: point.latitude, lng: point.longitude);
+                        _selectedDropoff = GeoPoint(
+                          lat: point.latitude,
+                          lng: point.longitude,
+                        );
                       });
                     },
                     onPositionChanged: (camera, hasGesture) {
@@ -58,40 +65,61 @@ class _DropoffMapPickerPageState extends State<DropoffMapPickerPage> {
 
                       setState(() {
                         _mapCenter = GeoPoint(
-                            lat: camera.center.latitude,
-                            lng: camera.center.longitude);
+                          lat: camera.center.latitude,
+                          lng: camera.center.longitude,
+                        );
                       });
-                    }),
-                children: [
-                  TileLayer(
+                    },
+                  ),
+                  children: [
+                    TileLayer(
                       urlTemplate:
                           'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'transporter.mobile'),
-                  MarkerLayer(markers: [
-                    Marker(
-                        point: LatLng(pickup.lat, pickup.lng),
-                        width: 56,
-                        height: 56,
-                        child: const Icon(Icons.my_location,
-                            color: Colors.blue, size: 34)),
-                    if (selectedDropoff != null)
-                      Marker(
-                          point:
-                              LatLng(selectedDropoff.lat, selectedDropoff.lng),
+                      userAgentPackageName: 'transporter.mobile',
+                    ),
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          point: LatLng(pickup.lat, pickup.lng),
                           width: 56,
                           height: 56,
-                          child: const Icon(Icons.location_on,
-                              color: Colors.red, size: 38))
-                  ])
-                ]),
-            const IgnorePointer(
-                child: Center(
-                    child: Icon(Icons.add_location_alt,
-                        color: Colors.deepOrange, size: 42))),
-            Positioned(
-                top: 12,
-                right: 12,
-                child: FilledButton.tonalIcon(
+                          child: const Icon(
+                            Icons.my_location,
+                            color: Colors.blue,
+                            size: 34,
+                          ),
+                        ),
+                        if (selectedDropoff != null)
+                          Marker(
+                            point: LatLng(
+                              selectedDropoff.lat,
+                              selectedDropoff.lng,
+                            ),
+                            width: 56,
+                            height: 56,
+                            child: const Icon(
+                              Icons.location_on,
+                              color: Colors.red,
+                              size: 38,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+                const IgnorePointer(
+                  child: Center(
+                    child: Icon(
+                      Icons.add_location_alt,
+                      color: Colors.deepOrange,
+                      size: 42,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: FilledButton.tonalIcon(
                     onPressed: () {
                       _mapController.move(LatLng(pickup.lat, pickup.lng), 17);
                       setState(() {
@@ -99,39 +127,51 @@ class _DropoffMapPickerPageState extends State<DropoffMapPickerPage> {
                       });
                     },
                     icon: const Icon(Icons.my_location),
-                    label: const Text('Ir ao pickup')))
-          ])),
+                    label: const Text('Ir ao pickup'),
+                  ),
+                ),
+              ],
+            ),
+          ),
           Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text('Pickup: ${_formatPoint(pickup)}'),
-                    const SizedBox(height: 6),
-                    Text(selectedDropoff == null
-                        ? 'Toque no mapa ou use o centro para marcar o dropoff.'
-                        : 'Dropoff selecionado: ${_formatPoint(selectedDropoff)}'),
-                    const SizedBox(height: 6),
-                    Text('Centro atual do mapa: ${_formatPoint(mapCenter)}'),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            _selectedDropoff = mapCenter;
-                          });
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Pickup: ${_formatPoint(pickup)}'),
+                const SizedBox(height: 6),
+                Text(
+                  selectedDropoff == null
+                      ? 'Toque no mapa ou use o centro para marcar o dropoff.'
+                      : 'Dropoff selecionado: ${_formatPoint(selectedDropoff)}',
+                ),
+                const SizedBox(height: 6),
+                Text('Centro atual do mapa: ${_formatPoint(mapCenter)}'),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _selectedDropoff = mapCenter;
+                    });
+                  },
+                  icon: const Icon(Icons.center_focus_strong),
+                  label: const Text('Usar centro do mapa'),
+                ),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: selectedDropoff == null
+                      ? null
+                      : () {
+                          Navigator.of(context).pop(selectedDropoff);
                         },
-                        icon: const Icon(Icons.center_focus_strong),
-                        label: const Text('Usar centro do mapa')),
-                    const SizedBox(height: 12),
-                    FilledButton(
-                        onPressed: selectedDropoff == null
-                            ? null
-                            : () {
-                                Navigator.of(context).pop(selectedDropoff);
-                              },
-                        child: const Text('Confirmar dropoff'))
-                  ]))
-        ]));
+                  child: const Text('Confirmar dropoff'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   String _formatPoint(GeoPoint point) {

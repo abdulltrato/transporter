@@ -1,20 +1,19 @@
 import 'dart:async';
+import 'dart:math';
+
 import 'package:socket_io_client/socket_io_client.dart' as io;
+
 import '../models/driver.dart';
 import '../models/geo_point.dart';
 import '../models/ride.dart';
 
-enum RealtimeConnectionState {
-  disconnected,
-  connecting,
-  connected
-}
+enum RealtimeConnectionState { disconnected, connecting, connected }
 
 class DriverStatusUpdate {
   const DriverStatusUpdate({
     required this.driverId,
     required this.isOnline,
-    required this.updatedAt
+    required this.updatedAt,
   });
 
   final String driverId;
@@ -27,7 +26,9 @@ class DriverStatusUpdate {
     return DriverStatusUpdate(
       driverId: (json['driverId'] ?? '').toString(),
       isOnline: status == 'online',
-      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ?? DateTime.now()
+      updatedAt:
+          DateTime.tryParse(json['updatedAt'] as String? ?? '') ??
+          DateTime.now(),
     );
   }
 }
@@ -36,7 +37,7 @@ class DriverLocationUpdate {
   const DriverLocationUpdate({
     required this.driverId,
     required this.coordinates,
-    required this.updatedAt
+    required this.updatedAt,
   });
 
   final String driverId;
@@ -44,12 +45,15 @@ class DriverLocationUpdate {
   final DateTime updatedAt;
 
   factory DriverLocationUpdate.fromJson(Map<String, dynamic> json) {
-    final coordinates = _toJsonMap(json['coordinates']) ?? const <String, dynamic>{};
+    final coordinates =
+        _toJsonMap(json['coordinates']) ?? const <String, dynamic>{};
 
     return DriverLocationUpdate(
       driverId: (json['driverId'] ?? '').toString(),
       coordinates: GeoPoint.fromJson(coordinates),
-      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ?? DateTime.now()
+      updatedAt:
+          DateTime.tryParse(json['updatedAt'] as String? ?? '') ??
+          DateTime.now(),
     );
   }
 }
@@ -59,7 +63,7 @@ class MapSnapshot {
     required this.origin,
     required this.radiusKm,
     required this.generatedAt,
-    required this.drivers
+    required this.drivers,
   });
 
   final GeoPoint origin;
@@ -74,35 +78,53 @@ class MapSnapshot {
     return MapSnapshot(
       origin: GeoPoint.fromJson(origin),
       radiusKm: (json['radiusKm'] as num?)?.toDouble() ?? 2,
-      generatedAt: DateTime.tryParse(json['generatedAt'] as String? ?? '') ?? DateTime.now(),
+      generatedAt:
+          DateTime.tryParse(json['generatedAt'] as String? ?? '') ??
+          DateTime.now(),
       drivers: rawDrivers
           .map(_toJsonMap)
           .whereType<Map<String, dynamic>>()
           .map(Driver.fromJson)
-          .toList()
+          .toList(),
     );
   }
 }
 
+/// Serviço realtime com reconexão progressiva para ambientes móveis instáveis.
 class RealtimeMapService {
-  RealtimeMapService({required this.baseUrl});
+  RealtimeMapService({
+    required this.baseUrl,
+    this.maxReconnectAttempts = 8,
+    this.baseReconnectDelay = const Duration(seconds: 1),
+    this.maxReconnectDelay = const Duration(seconds: 30),
+  });
 
   final String baseUrl;
+  final int maxReconnectAttempts;
+  final Duration baseReconnectDelay;
+  final Duration maxReconnectDelay;
 
   io.Socket? _socket;
   String? _token;
+  bool _manualDisconnect = false;
+  int _reconnectAttempt = 0;
+  Timer? _reconnectTimer;
 
-  final _connectionStateController = StreamController<RealtimeConnectionState>.broadcast();
+  final _connectionStateController =
+      StreamController<RealtimeConnectionState>.broadcast();
   final _snapshotController = StreamController<MapSnapshot>.broadcast();
-  final _driverStatusController = StreamController<DriverStatusUpdate>.broadcast();
-  final _driverLocationController = StreamController<DriverLocationUpdate>.broadcast();
+  final _driverStatusController =
+      StreamController<DriverStatusUpdate>.broadcast();
+  final _driverLocationController =
+      StreamController<DriverLocationUpdate>.broadcast();
   final _rideUpdatedController = StreamController<Ride>.broadcast();
   final _errorController = StreamController<String>.broadcast();
 
   Stream<RealtimeConnectionState> get connectionStateStream =>
       _connectionStateController.stream;
   Stream<MapSnapshot> get snapshotStream => _snapshotController.stream;
-  Stream<DriverStatusUpdate> get driverStatusStream => _driverStatusController.stream;
+  Stream<DriverStatusUpdate> get driverStatusStream =>
+      _driverStatusController.stream;
   Stream<DriverLocationUpdate> get driverLocationStream =>
       _driverLocationController.stream;
   Stream<Ride> get rideUpdatedStream => _rideUpdatedController.stream;
@@ -118,6 +140,9 @@ class RealtimeMapService {
     }
 
     if (_token == sanitizedToken && _socket != null) {
+      _manualDisconnect = false;
+      _cancelReconnectTimer();
+
       if (_socket!.connected) {
         _connectionStateController.add(RealtimeConnectionState.connected);
       } else {
@@ -128,7 +153,59 @@ class RealtimeMapService {
     }
 
     _token = sanitizedToken;
+    _openSocketConnection();
+  }
+
+  void reconnect() {
+    final token = _token;
+    if (token == null || token.trim().isEmpty) {
+      return;
+    }
+
+    _manualDisconnect = false;
+    _openSocketConnection();
+  }
+
+  void subscribeToMap({required GeoPoint origin, double radiusKm = 2}) {
+    final payload = {
+      'lat': origin.lat,
+      'lng': origin.lng,
+      'radiusKm': radiusKm,
+    };
+
+    _socket?.emit('map:subscribe', payload);
+  }
+
+  void unsubscribeFromMap() {
+    _socket?.emit('map:unsubscribe');
+  }
+
+  void disconnect() {
+    _manualDisconnect = true;
+    _cancelReconnectTimer();
+    _reconnectAttempt = 0;
+    _teardownSocket(emitDisconnected: true);
+  }
+
+  void dispose() {
     disconnect();
+    _connectionStateController.close();
+    _snapshotController.close();
+    _driverStatusController.close();
+    _driverLocationController.close();
+    _rideUpdatedController.close();
+    _errorController.close();
+  }
+
+  void _openSocketConnection() {
+    final sanitizedToken = (_token ?? '').trim();
+    if (sanitizedToken.isEmpty) {
+      return;
+    }
+
+    _manualDisconnect = false;
+    _cancelReconnectTimer();
+    _teardownSocket();
 
     _connectionStateController.add(RealtimeConnectionState.connecting);
 
@@ -139,20 +216,24 @@ class RealtimeMapService {
           .setAuth({'token': sanitizedToken})
           .setExtraHeaders({'Authorization': 'Bearer $sanitizedToken'})
           .disableAutoConnect()
-          .build()
+          .build(),
     );
 
     socket.onConnect((_) {
+      _reconnectAttempt = 0;
+      _cancelReconnectTimer();
       _connectionStateController.add(RealtimeConnectionState.connected);
     });
 
     socket.onDisconnect((_) {
       _connectionStateController.add(RealtimeConnectionState.disconnected);
+      _scheduleReconnect();
     });
 
     socket.onConnectError((error) {
-      _errorController.add('Falha ao conectar no realtime: $error');
+      _errorController.add('Falha ao ligar ao realtime: $error');
       _connectionStateController.add(RealtimeConnectionState.disconnected);
+      _scheduleReconnect();
     });
 
     socket.onError((error) {
@@ -162,11 +243,17 @@ class RealtimeMapService {
     socket.on('auth:error', (payload) {
       final event = _toJsonMap(payload);
       if (event != null) {
-        _errorController.add(event['message'] as String? ?? 'Falha de autenticacao.');
-        return;
+        _errorController.add(
+          event['message'] as String? ?? 'Falha de autenticação.',
+        );
+      } else {
+        _errorController.add('Falha de autenticação no realtime.');
       }
 
-      _errorController.add('Falha de autenticacao no realtime.');
+      // Em falha de autenticação, evita ciclos de reconexão automáticos.
+      _manualDisconnect = true;
+      _cancelReconnectTimer();
+      _teardownSocket(emitDisconnected: true);
     });
 
     socket.on('map:snapshot', (payload) {
@@ -201,53 +288,65 @@ class RealtimeMapService {
     socket.connect();
   }
 
-  void reconnect() {
+  void _scheduleReconnect() {
+    if (_manualDisconnect || _reconnectTimer != null) {
+      return;
+    }
+
     final token = _token;
     if (token == null || token.trim().isEmpty) {
       return;
     }
 
-    connect(token: token);
+    if (_reconnectAttempt >= maxReconnectAttempts) {
+      _errorController.add(
+        'Tempo real indisponível após $maxReconnectAttempts tentativas.',
+      );
+      return;
+    }
+
+    _reconnectAttempt += 1;
+
+    final exponent = max(0, _reconnectAttempt - 1);
+    final multiplier = pow(2, exponent).toInt();
+    final delayInMilliseconds = min(
+      baseReconnectDelay.inMilliseconds * multiplier,
+      maxReconnectDelay.inMilliseconds,
+    );
+
+    _errorController.add(
+      'A restabelecer ligação em tempo real '
+      '(tentativa $_reconnectAttempt de $maxReconnectAttempts)...',
+    );
+
+    _reconnectTimer = Timer(Duration(milliseconds: delayInMilliseconds), () {
+      _reconnectTimer = null;
+      if (_manualDisconnect) {
+        return;
+      }
+      _openSocketConnection();
+    });
   }
 
-  void subscribeToMap({
-    required GeoPoint origin,
-    double radiusKm = 2
-  }) {
-    final payload = {
-      'lat': origin.lat,
-      'lng': origin.lng,
-      'radiusKm': radiusKm
-    };
-
-    _socket?.emit('map:subscribe', payload);
+  void _cancelReconnectTimer() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
   }
 
-  void unsubscribeFromMap() {
-    _socket?.emit('map:unsubscribe');
-  }
-
-  void disconnect() {
+  void _teardownSocket({bool emitDisconnected = false}) {
     _socket?.disconnect();
     _socket?.dispose();
     _socket = null;
-    _connectionStateController.add(RealtimeConnectionState.disconnected);
-  }
 
-  void dispose() {
-    disconnect();
-    _connectionStateController.close();
-    _snapshotController.close();
-    _driverStatusController.close();
-    _driverLocationController.close();
-    _rideUpdatedController.close();
-    _errorController.close();
+    if (emitDisconnected) {
+      _connectionStateController.add(RealtimeConnectionState.disconnected);
+    }
   }
 
   String _buildRealtimeUrl() {
     final uri = Uri.parse(baseUrl);
     final segments = <String>[
-      ...uri.pathSegments.where((segment) => segment.isNotEmpty)
+      ...uri.pathSegments.where((segment) => segment.isNotEmpty),
     ];
 
     if (segments.isNotEmpty && segments.last.toLowerCase() == 'api') {

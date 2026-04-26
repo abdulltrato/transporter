@@ -6,14 +6,11 @@ enum DeviceLocationAccessState {
   granted,
   denied,
   deniedForever,
-  serviceDisabled
+  serviceDisabled,
 }
 
 class DeviceLocationAccessResult {
-  const DeviceLocationAccessResult({
-    required this.state,
-    this.message
-  });
+  const DeviceLocationAccessResult({required this.state, this.message});
 
   final DeviceLocationAccessState state;
   final String? message;
@@ -21,6 +18,7 @@ class DeviceLocationAccessResult {
   bool get isGranted => state == DeviceLocationAccessState.granted;
 }
 
+/// Encapsula acesso ao GPS para manter o restante código desacoplado do plugin.
 class DeviceLocationService {
   const DeviceLocationService();
 
@@ -29,7 +27,7 @@ class DeviceLocationService {
     if (!enabled) {
       return const DeviceLocationAccessResult(
         state: DeviceLocationAccessState.serviceDisabled,
-        message: 'Ative o GPS do dispositivo para usar localizacao dinamica.'
+        message: 'Ative o GPS do dispositivo para usar localização dinâmica.',
       );
     }
 
@@ -41,19 +39,19 @@ class DeviceLocationService {
     if (permission == LocationPermission.denied) {
       return const DeviceLocationAccessResult(
         state: DeviceLocationAccessState.denied,
-        message: 'Permissao de localizacao negada.'
+        message: 'Permissão de localização negada.',
       );
     }
 
     if (permission == LocationPermission.deniedForever) {
       return const DeviceLocationAccessResult(
         state: DeviceLocationAccessState.deniedForever,
-        message: 'Permissao de localizacao negada permanentemente.'
+        message: 'Permissão de localização negada permanentemente.',
       );
     }
 
     return const DeviceLocationAccessResult(
-      state: DeviceLocationAccessState.granted
+      state: DeviceLocationAccessState.granted,
     );
   }
 
@@ -64,7 +62,7 @@ class DeviceLocationService {
     }
 
     final position = await Geolocator.getCurrentPosition(
-      locationSettings: _locationSettings
+      locationSettings: _singleShotLocationSettings,
     );
 
     return GeoPoint(lat: position.latitude, lng: position.longitude);
@@ -72,18 +70,21 @@ class DeviceLocationService {
 
   Stream<GeoPoint> positionStream({
     int distanceFilterMeters = 15,
-    LocationAccuracy accuracy = LocationAccuracy.best
+    LocationAccuracy accuracy = LocationAccuracy.best,
   }) {
     return Geolocator.getPositionStream(
       locationSettings: LocationSettings(
         accuracy: accuracy,
-        distanceFilter: distanceFilterMeters
-      )
-    ).map((position) => GeoPoint(lat: position.latitude, lng: position.longitude));
+        distanceFilter: distanceFilterMeters,
+      ),
+    ).map(
+      (position) => GeoPoint(lat: position.latitude, lng: position.longitude),
+    );
   }
 
-  LocationSettings get _locationSettings => const LocationSettings(
+  LocationSettings get _singleShotLocationSettings => const LocationSettings(
     accuracy: LocationAccuracy.best,
-    distanceFilter: 0
+    distanceFilter: 0,
+    timeLimit: Duration(seconds: 20),
   );
 }

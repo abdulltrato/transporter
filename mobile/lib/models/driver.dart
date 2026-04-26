@@ -1,12 +1,13 @@
 import 'geo_point.dart';
 
+/// Representa um taxista visível no mapa.
 class Driver {
   const Driver({
     required this.userId,
     required this.name,
     required this.distanceKm,
     required this.location,
-    required this.isOnline
+    required this.isOnline,
   });
 
   final String userId;
@@ -31,7 +32,7 @@ class Driver {
           : baseName,
       distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0,
       location: GeoPoint.fromJson(location),
-      isOnline: json['isOnline'] as bool? ?? true
+      isOnline: json['isOnline'] as bool? ?? true,
     );
   }
 
@@ -39,14 +40,14 @@ class Driver {
     String? name,
     double? distanceKm,
     GeoPoint? location,
-    bool? isOnline
+    bool? isOnline,
   }) {
     return Driver(
       userId: userId,
       name: name ?? this.name,
       distanceKm: distanceKm ?? this.distanceKm,
       location: location ?? this.location,
-      isOnline: isOnline ?? this.isOnline
+      isOnline: isOnline ?? this.isOnline,
     );
   }
 }

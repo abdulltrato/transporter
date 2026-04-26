@@ -11,6 +11,7 @@ import 'services/api_client.dart';
 import 'services/auth_service.dart';
 import 'services/device_location_service.dart';
 import 'services/location_service.dart';
+import 'services/native_runtime_service.dart';
 import 'services/realtime_map_service.dart';
 import 'services/rides_service.dart';
 
@@ -24,10 +25,11 @@ class TransporterApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-        title: 'Transporter',
-        debugShowCheckedModeBanner: false,
-        theme: buildAppTheme(),
-        home: const _HomeShell());
+      title: 'Transporter',
+      debugShowCheckedModeBanner: false,
+      theme: buildAppTheme(),
+      home: const _HomeShell(),
+    );
   }
 }
 
@@ -38,7 +40,7 @@ class _HomeShell extends StatefulWidget {
   State<_HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<_HomeShell> {
+class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
   static const _defaultOrigin = GeoPoint(lat: -25.9653, lng: 32.5892);
   static const _defaultRadiusKm = 5.0;
 
@@ -49,13 +51,14 @@ class _HomeShellState extends State<_HomeShell> {
   GeoPoint? _dropoffLocation;
   String? _locationWarning;
   StreamSubscription<GeoPoint>? _locationSubscription;
-  bool _isSyncingLocation = false;
-  GeoPoint? _pendingLocationSync;
+  StreamSubscription<NativeRuntimeSnapshot>? _nativeSnapshotSubscription;
+  NativeRuntimeSnapshot _nativeSnapshot = NativeRuntimeSnapshot.initial();
 
   late final ApiClient _apiClient;
   late final AuthService _authService;
   late final DeviceLocationService _deviceLocationService;
   late final LocationService _locationService;
+  late final NativeRuntimeService _nativeRuntimeService;
   late final RealtimeMapService _realtimeMapService;
   late final RidesService _ridesService;
 
@@ -67,34 +70,52 @@ class _HomeShellState extends State<_HomeShell> {
     _authService = AuthService(_apiClient);
     _deviceLocationService = const DeviceLocationService();
     _locationService = LocationService(_apiClient);
+    _nativeRuntimeService = NativeRuntimeService(
+      mode: NativeRuntimeMode.robust,
+    );
+    _nativeSnapshotSubscription = _nativeRuntimeService.snapshotStream.listen(
+      _handleNativeSnapshot,
+    );
     _realtimeMapService = RealtimeMapService(baseUrl: _apiClient.baseUrl);
     _ridesService = RidesService(_apiClient);
+
+    WidgetsBinding.instance.addObserver(this);
+    _nativeRuntimeService.updateForegroundState(true);
     unawaited(_startLocationTracking());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _locationSubscription?.cancel();
+    _nativeSnapshotSubscription?.cancel();
+    _nativeRuntimeService.dispose();
     _realtimeMapService.dispose();
     super.dispose();
   }
 
-  Future<void> _handleLogin(
-      {required String fullName,
-      required String phone,
-      required String code,
-      required String role}) async {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _nativeRuntimeService.updateForegroundState(_isForegroundState(state));
+  }
+
+  Future<void> _handleLogin({
+    required String fullName,
+    required String phone,
+    required String code,
+    required String role,
+  }) async {
     final sanitizedName = fullName.trim();
     final sanitizedPhone = phone.trim();
     final sanitizedCode = code.trim();
 
     if (sanitizedPhone.isEmpty) {
-      _showMessage('Informe um telefone valido.');
+      _showMessage('Indique um telefone válido.');
       return;
     }
 
     if (sanitizedName.isEmpty) {
-      _showMessage('Informe seu nome completo.');
+      _showMessage('Indique o seu nome completo.');
       return;
     }
 
@@ -102,12 +123,19 @@ class _HomeShellState extends State<_HomeShell> {
       final devCode = await _authService.requestOtp(sanitizedPhone);
       final verificationCode = sanitizedCode.isEmpty ? devCode : sanitizedCode;
       final accessToken = await _authService.verifyOtp(
-          phone: sanitizedPhone,
-          code: verificationCode,
-          role: role,
-          fullName: sanitizedName);
+        phone: sanitizedPhone,
+        code: verificationCode,
+        role: role,
+        fullName: sanitizedName,
+      );
+
+      if (accessToken.isEmpty) {
+        _showMessage('Falha no login: token de sessão inválido.');
+        return;
+      }
 
       _apiClient.token = accessToken;
+      _nativeRuntimeService.setSessionToken(accessToken);
       _realtimeMapService.connect(token: accessToken);
 
       if (!mounted) {
@@ -122,14 +150,14 @@ class _HomeShellState extends State<_HomeShell> {
 
       final currentLocation = _currentLocation;
       if (currentLocation != null) {
-        unawaited(_syncMyLocation(currentLocation));
+        _scheduleLocationSync(currentLocation);
       }
 
       final otpHint = sanitizedCode.isEmpty
-          ? 'Dev OTP usado automaticamente.'
-          : 'OTP informado manualmente.';
+          ? 'OTP de desenvolvimento usado automaticamente.'
+          : 'OTP introduzido manualmente.';
 
-      _showMessage('Sessao iniciada como $role. $otpHint');
+      _showMessage('Sessão iniciada como $role. $otpHint');
     } catch (error) {
       _showMessage('Falha no login: $error');
     }
@@ -140,43 +168,62 @@ class _HomeShellState extends State<_HomeShell> {
     final origin = _currentLocation ?? _defaultOrigin;
 
     final pages = [
-      LoginPage(onSubmit: _handleLogin),
+      LoginPage(
+        onSubmit: _handleLogin,
+        isRobustModeEnabled: _nativeRuntimeService.isRobustMode,
+        nativeModeSummary: _buildNativeModeSummary(),
+        onRobustModeChanged: _setNativeMode,
+      ),
       MapPage(
-          locationService: _locationService,
-          realtimeMapService: _realtimeMapService,
-          origin: origin,
-          radiusKm: _defaultRadiusKm,
-          token: _accessToken),
+        locationService: _locationService,
+        realtimeMapService: _realtimeMapService,
+        origin: origin,
+        radiusKm: _defaultRadiusKm,
+        token: _accessToken,
+      ),
       RidePage(
-          ridesService: _ridesService,
-          realtimeMapService: _realtimeMapService,
-          pickup: origin,
-          hasLivePickup: _currentLocation != null,
-          dropoff: _dropoffLocation,
-          onCaptureDropoffFromGps: _captureDropoffFromGps,
-          onSelectDropoffFromMap: _setDropoffFromMap,
-          onClearDropoff: _clearDropoff,
-          locationWarning: _locationWarning,
-          token: _accessToken,
-          role: _currentRole)
+        ridesService: _ridesService,
+        realtimeMapService: _realtimeMapService,
+        pickup: origin,
+        hasLivePickup: _currentLocation != null,
+        dropoff: _dropoffLocation,
+        onCaptureDropoffFromGps: _captureDropoffFromGps,
+        onSelectDropoffFromMap: _setDropoffFromMap,
+        onClearDropoff: _clearDropoff,
+        locationWarning: _locationWarning,
+        token: _accessToken,
+        role: _currentRole,
+      ),
     ];
 
     return Scaffold(
-        body: pages[_selectedIndex],
-        bottomNavigationBar: NavigationBar(
+      body: pages[_selectedIndex],
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _NativeModeStatusBar(snapshot: _nativeSnapshot),
+          NavigationBar(
             selectedIndex: _selectedIndex,
             destinations: const [
               NavigationDestination(
-                  icon: Icon(Icons.lock_open), label: 'Acesso'),
+                icon: Icon(Icons.lock_open),
+                label: 'Acesso',
+              ),
               NavigationDestination(icon: Icon(Icons.map), label: 'Mapa'),
               NavigationDestination(
-                  icon: Icon(Icons.directions_bike), label: 'Corrida')
+                icon: Icon(Icons.directions_bike),
+                label: 'Corrida',
+              ),
             ],
             onDestinationSelected: (value) {
               setState(() {
                 _selectedIndex = value;
               });
-            }));
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   void _showMessage(String message) {
@@ -184,8 +231,9 @@ class _HomeShellState extends State<_HomeShell> {
       return;
     }
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _startLocationTracking() async {
@@ -214,59 +262,44 @@ class _HomeShellState extends State<_HomeShell> {
       setState(() {
         _currentLocation = initialPosition;
       });
-      unawaited(_syncMyLocation(initialPosition));
+      _scheduleLocationSync(initialPosition);
     }
 
     final previousSubscription = _locationSubscription;
     if (previousSubscription != null) {
       await previousSubscription.cancel();
     }
-    _locationSubscription =
-        _deviceLocationService.positionStream().listen((point) {
-      if (!mounted) {
-        return;
-      }
+    _locationSubscription = _deviceLocationService.positionStream().listen(
+      (point) {
+        if (!mounted) {
+          return;
+        }
 
-      setState(() {
-        _currentLocation = point;
-      });
+        setState(() {
+          _currentLocation = point;
+        });
 
-      unawaited(_syncMyLocation(point));
-    }, onError: (Object error) {
-      if (!mounted) {
-        return;
-      }
+        _scheduleLocationSync(point);
+      },
+      onError: (Object error) {
+        if (!mounted) {
+          return;
+        }
 
-      setState(() {
-        _locationWarning = 'Falha ao ler GPS: $error';
-      });
-    });
+        setState(() {
+          _locationWarning = 'Falha ao ler o GPS: $error';
+        });
+      },
+    );
   }
 
-  Future<void> _syncMyLocation(GeoPoint point) async {
-    final token = (_accessToken ?? '').trim();
-    if (token.isEmpty) {
-      return;
-    }
-
-    if (_isSyncingLocation) {
-      _pendingLocationSync = point;
-      return;
-    }
-
-    _isSyncingLocation = true;
-    try {
-      await _locationService.updateMyLocation(point);
-    } catch (_) {
-      // Mantem o app resiliente caso o backend esteja indisponivel.
-    } finally {
-      _isSyncingLocation = false;
-      final pending = _pendingLocationSync;
-      _pendingLocationSync = null;
-      if (pending != null) {
-        unawaited(_syncMyLocation(pending));
-      }
-    }
+  void _scheduleLocationSync(GeoPoint point) {
+    _nativeRuntimeService.scheduleLocationSync(
+      point,
+      sender: (nextPoint) async {
+        await _locationService.updateMyLocation(nextPoint);
+      },
+    );
   }
 
   Future<GeoPoint?> _captureDropoffFromGps() async {
@@ -293,7 +326,7 @@ class _HomeShellState extends State<_HomeShell> {
       _locationWarning = null;
     });
 
-    unawaited(_syncMyLocation(position));
+    _scheduleLocationSync(position);
     return position;
   }
 
@@ -317,6 +350,40 @@ class _HomeShellState extends State<_HomeShell> {
     });
   }
 
+  void _setNativeMode(bool enabled) {
+    _nativeRuntimeService.setMode(
+      enabled ? NativeRuntimeMode.robust : NativeRuntimeMode.standard,
+    );
+  }
+
+  void _handleNativeSnapshot(NativeRuntimeSnapshot snapshot) {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _nativeSnapshot = snapshot;
+    });
+  }
+
+  String _buildNativeModeSummary() {
+    final snapshot = _nativeSnapshot;
+    final retryInfo = snapshot.retryAttempt > 0
+        ? ' · Tentativa ${snapshot.retryAttempt}'
+        : '';
+    return '${snapshot.modeLabel} · ${snapshot.stateLabel}$retryInfo';
+  }
+
+  bool _isForegroundState(AppLifecycleState state) {
+    return switch (state) {
+      AppLifecycleState.resumed => true,
+      AppLifecycleState.inactive => true,
+      AppLifecycleState.hidden => false,
+      AppLifecycleState.paused => false,
+      AppLifecycleState.detached => false,
+    };
+  }
+
   String _resolveApiBaseUrl() {
     const envBaseUrl = String.fromEnvironment('TRANSPORTER_API_BASE_URL');
     if (envBaseUrl.isNotEmpty) {
@@ -328,5 +395,37 @@ class _HomeShellState extends State<_HomeShell> {
     }
 
     return 'http://localhost:3000';
+  }
+}
+
+class _NativeModeStatusBar extends StatelessWidget {
+  const _NativeModeStatusBar({required this.snapshot});
+
+  final NativeRuntimeSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final backgroundColor = switch (snapshot.state) {
+      NativeSyncState.syncing => theme.colorScheme.primaryContainer,
+      NativeSyncState.retrying => theme.colorScheme.secondaryContainer,
+      NativeSyncState.paused => theme.colorScheme.surfaceContainerHighest,
+      NativeSyncState.idle => theme.colorScheme.surface,
+    };
+
+    final retryInfo = snapshot.retryAttempt > 0
+        ? ' · Tentativa ${snapshot.retryAttempt}'
+        : '';
+    final authInfo = snapshot.hasSessionToken ? '' : ' · Sem sessão';
+
+    return Container(
+      width: double.infinity,
+      color: backgroundColor,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Text(
+        'Modo ${snapshot.modeLabel} · ${snapshot.stateLabel}$retryInfo$authInfo',
+        style: theme.textTheme.bodySmall,
+      ),
+    );
   }
 }
