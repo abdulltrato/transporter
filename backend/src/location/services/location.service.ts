@@ -14,26 +14,35 @@ export interface NearbyDriver {
 export class LocationService {
   constructor(private readonly locationStore: LocationStore) {}
 
-  updateMyLocation(userId: string, coordinates: GeoPoint): UserLocationRecord {
+  async updateMyLocation(
+    userId: string,
+    coordinates: GeoPoint
+  ): Promise<UserLocationRecord> {
     return this.locationStore.upsert(userId, coordinates);
   }
 
-  getMyLocation(userId: string): UserLocationRecord | undefined {
+  async getMyLocation(userId: string): Promise<UserLocationRecord | undefined> {
     return this.locationStore.findByUserId(userId);
   }
 
-  findNearbyDrivers(input: {
+  async findNearbyDrivers(input: {
     origin: GeoPoint;
     candidateDriverIds: string[];
     radiusKm: number;
     excludedDriverIds?: string[];
-  }): NearbyDriver[] {
+  }): Promise<NearbyDriver[]> {
     const excluded = new Set(input.excludedDriverIds ?? []);
+    const candidateDriverIds = input.candidateDriverIds.filter(
+      (driverId) => !excluded.has(driverId)
+    );
+    const locations = await this.locationStore.listByUserIds(candidateDriverIds);
+    const locationByDriverId = new Map(
+      locations.map((location) => [location.userId, location])
+    );
 
-    return input.candidateDriverIds
-      .filter((driverId) => !excluded.has(driverId))
+    return candidateDriverIds
       .map((driverId) => {
-        const location = this.locationStore.findByUserId(driverId);
+        const location = locationByDriverId.get(driverId);
         if (!location) {
           return undefined;
         }

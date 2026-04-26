@@ -18,14 +18,14 @@ export class DriverMatchingService {
     private readonly locationService: LocationService
   ) {}
 
-  findClosestDriver(input: {
+  async findClosestDriver(input: {
     pickup: GeoPoint;
     excludedDriverIds?: string[];
-  }): MatchResult | undefined {
-    const candidates = this.driversService.listOnlineDriverIds();
+  }): Promise<MatchResult | undefined> {
+    const candidates = await this.driversService.listOnlineDriverIds();
 
     for (const radiusKm of this.searchRadiiKm) {
-      const nearbyDrivers = this.locationService.findNearbyDrivers({
+      const nearbyDrivers = await this.locationService.findNearbyDrivers({
         origin: input.pickup,
         candidateDriverIds: candidates,
         radiusKm,

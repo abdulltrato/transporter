@@ -6,16 +6,16 @@ import { UserEntity } from '../entities/user.entity';
 export class UsersService {
   constructor(private readonly usersRepository: UsersRepository) {}
 
-  create(input: CreateUserInput): UserEntity {
+  async create(input: CreateUserInput): Promise<UserEntity> {
     return this.usersRepository.create(input);
   }
 
-  findByPhone(phone: string): UserEntity | undefined {
+  async findByPhone(phone: string): Promise<UserEntity | undefined> {
     return this.usersRepository.findByPhone(phone);
   }
 
-  findByIdOrThrow(userId: string): UserEntity {
-    const user = this.usersRepository.findById(userId);
+  async findByIdOrThrow(userId: string): Promise<UserEntity> {
+    const user = await this.usersRepository.findById(userId);
 
     if (!user) {
       throw new NotFoundException('User not found.');
@@ -24,8 +24,8 @@ export class UsersService {
     return user;
   }
 
-  updateMyProfile(userId: string, fullName: string): UserEntity {
-    const updated = this.usersRepository.updateFullName(userId, fullName);
+  async updateMyProfile(userId: string, fullName: string): Promise<UserEntity> {
+    const updated = await this.usersRepository.updateFullName(userId, fullName);
 
     if (!updated) {
       throw new NotFoundException('User not found.');

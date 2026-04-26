@@ -19,12 +19,16 @@ export class RidesService {
     private readonly matchingService: DriverMatchingService
   ) {}
 
-  requestRide(currentUser: RequestUser, pickup: RideEntity['pickup'], dropoff?: RideEntity['dropoff']): RideEntity {
+  async requestRide(
+    currentUser: RequestUser,
+    pickup: RideEntity['pickup'],
+    dropoff?: RideEntity['dropoff']
+  ): Promise<RideEntity> {
     if (currentUser.role !== UserRole.CLIENT) {
       throw new ForbiddenException('Only clients can request rides.');
     }
 
-    const match = this.matchingService.findClosestDriver({ pickup });
+    const match = await this.matchingService.findClosestDriver({ pickup });
 
     if (!match) {
       return this.ridesRepository.create({
@@ -47,12 +51,16 @@ export class RidesService {
     });
   }
 
-  respondToRide(currentUser: RequestUser, rideId: string, action: RideResponseAction): RideEntity {
+  async respondToRide(
+    currentUser: RequestUser,
+    rideId: string,
+    action: RideResponseAction
+  ): Promise<RideEntity> {
     if (currentUser.role !== UserRole.DRIVER) {
       throw new ForbiddenException('Only drivers can answer rides.');
     }
 
-    const ride = this.findByIdOrThrow(rideId);
+    const ride = await this.findByIdOrThrow(rideId);
 
     if (ride.driverId !== currentUser.id) {
       throw new ForbiddenException('This ride is not assigned to this driver.');
@@ -70,7 +78,7 @@ export class RidesService {
     }
 
     const rejectedDriverIds = [...new Set([...ride.rejectedDriverIds, currentUser.id])];
-    const nextMatch = this.matchingService.findClosestDriver({
+    const nextMatch = await this.matchingService.findClosestDriver({
       pickup: ride.pickup,
       excludedDriverIds: rejectedDriverIds
     });
@@ -94,8 +102,8 @@ export class RidesService {
     });
   }
 
-  cancelRide(currentUser: RequestUser, rideId: string): RideEntity {
-    const ride = this.findByIdOrThrow(rideId);
+  async cancelRide(currentUser: RequestUser, rideId: string): Promise<RideEntity> {
+    const ride = await this.findByIdOrThrow(rideId);
 
     if (currentUser.role !== UserRole.CLIENT || ride.clientId !== currentUser.id) {
       throw new ForbiddenException('Only the client who requested the ride can cancel it.');
@@ -111,7 +119,7 @@ export class RidesService {
     });
   }
 
-  listMyRides(currentUser: RequestUser): RideEntity[] {
+  async listMyRides(currentUser: RequestUser): Promise<RideEntity[]> {
     if (currentUser.role === UserRole.CLIENT) {
       return this.ridesRepository.listByClientId(currentUser.id);
     }
@@ -119,8 +127,8 @@ export class RidesService {
     return this.ridesRepository.listByDriverId(currentUser.id);
   }
 
-  private findByIdOrThrow(rideId: string): RideEntity {
-    const ride = this.ridesRepository.findById(rideId);
+  private async findByIdOrThrow(rideId: string): Promise<RideEntity> {
+    const ride = await this.ridesRepository.findById(rideId);
 
     if (!ride) {
       throw new NotFoundException('Ride not found.');

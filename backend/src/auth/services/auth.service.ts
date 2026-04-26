@@ -27,14 +27,14 @@ export class AuthService {
   }> {
     this.otpService.validate(input.phone, input.code);
 
-    let user = this.usersService.findByPhone(input.phone);
+    let user = await this.usersService.findByPhone(input.phone);
 
     if (!user) {
       if (!input.fullName) {
         throw new BadRequestException('fullName is required for first login.');
       }
 
-      user = this.usersService.create({
+      user = await this.usersService.create({
         fullName: input.fullName,
         phone: input.phone,
         role: input.role
@@ -46,7 +46,7 @@ export class AuthService {
     }
 
     if (input.role === UserRole.DRIVER) {
-      this.driversService.ensureProfile(user.id);
+      await this.driversService.ensureProfile(user.id);
 
       if (
         input.documentId ||
@@ -54,7 +54,7 @@ export class AuthService {
         input.neighborhood ||
         input.operatingRegion
       ) {
-        this.driversService.updateProfile(user.id, {
+        await this.driversService.updateProfile(user.id, {
           documentId: input.documentId,
           documentExpiry: input.documentExpiry,
           neighborhood: input.neighborhood,

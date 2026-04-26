@@ -1,28 +1,48 @@
 import {
   ForbiddenException,
   Injectable,
+  Logger,
+  OnModuleInit,
   NotFoundException
 } from '@nestjs/common';
 import { DriverStatus } from '../../common/enums/driver-status.enum';
 import { UserRole } from '../../common/enums/user-role.enum';
+import { RealtimeEventsService } from '../../realtime/events/realtime-events.service';
 import { UsersService } from '../../users/services/users.service';
 import { UpdateDriverProfileDto } from '../dto/update-driver-profile.dto';
 import { DriverProfileEntity } from '../entities/driver-profile.entity';
 import { DriverProfilesRepository } from '../repositories/driver-profiles.repository';
+import { DriverPresenceStore } from '../store/driver-presence.store';
 import { DriverProfileValidatorService } from './driver-profile-validator.service';
 
 @Injectable()
-export class DriversService {
+export class DriversService implements OnModuleInit {
+  private readonly logger = new Logger(DriversService.name);
+
   constructor(
     private readonly usersService: UsersService,
     private readonly profilesRepository: DriverProfilesRepository,
-    private readonly validator: DriverProfileValidatorService
+    private readonly presenceStore: DriverPresenceStore,
+    private readonly validator: DriverProfileValidatorService,
+    private readonly realtimeEvents: RealtimeEventsService
   ) {}
 
-  ensureProfile(userId: string): DriverProfileEntity {
-    this.assertDriverRole(userId);
+  async onModuleInit(): Promise<void> {
+    const profiles = await this.profilesRepository.listAll();
+    const onlineDriverIds = profiles
+      .filter((profile) => profile.status === DriverStatus.ONLINE)
+      .map((profile) => profile.userId);
 
-    const existing = this.profilesRepository.findByUserId(userId);
+    await this.presenceStore.replaceOnlineDriverIds(onlineDriverIds);
+    this.logger.log(
+      `Driver presence synchronized (${onlineDriverIds.length} online).`
+    );
+  }
+
+  async ensureProfile(userId: string): Promise<DriverProfileEntity> {
+    await this.assertDriverRole(userId);
+
+    const existing = await this.profilesRepository.findByUserId(userId);
     if (existing) {
       return existing;
     }
@@ -30,8 +50,8 @@ export class DriversService {
     return this.profilesRepository.create(userId);
   }
 
-  getProfileOrThrow(userId: string): DriverProfileEntity {
-    const profile = this.profilesRepository.findByUserId(userId);
+  async getProfileOrThrow(userId: string): Promise<DriverProfileEntity> {
+    const profile = await this.profilesRepository.findByUserId(userId);
     if (!profile) {
       throw new NotFoundException('Driver profile not found.');
     }
@@ -39,10 +59,11 @@ export class DriversService {
     return profile;
   }
 
-  updateProfile(userId: string, input: UpdateDriverProfileDto): DriverProfileEntity {
-    this.assertDriverRole(userId);
-
-    const current = this.ensureProfile(userId);
+  async updateProfile(
+    userId: string,
+    input: UpdateDriverProfileDto
+  ): Promise<DriverProfileEntity> {
+    const current = await this.ensureProfile(userId);
     const updated: DriverProfileEntity = {
       ...current,
       ...input,
@@ -52,10 +73,11 @@ export class DriversService {
     return this.profilesRepository.save(updated);
   }
 
-  updateStatus(userId: string, status: DriverStatus): DriverProfileEntity {
-    this.assertDriverRole(userId);
-
-    const current = this.ensureProfile(userId);
+  async updateStatus(
+    userId: string,
+    status: DriverStatus
+  ): Promise<DriverProfileEntity> {
+    const current = await this.ensureProfile(userId);
 
     if (status === DriverStatus.ONLINE) {
       this.validator.assertCanGoOnline(current);
@@ -67,14 +89,19 @@ export class DriversService {
       updatedAt: new Date()
     };
 
-    return this.profilesRepository.save(updated);
+    const saved = await this.profilesRepository.save(updated);
+    await this.syncPresence(saved.userId, saved.status);
+    this.realtimeEvents.emitDriverStatusUpdated({
+      driverId: saved.userId,
+      status: saved.status,
+      updatedAt: saved.updatedAt.toISOString()
+    });
+
+    return saved;
   }
 
-  listOnlineDriverIds(): string[] {
-    return this.profilesRepository
-      .listAll()
-      .filter((profile) => profile.status === DriverStatus.ONLINE)
-      .map((profile) => profile.userId);
+  async listOnlineDriverIds(): Promise<string[]> {
+    return this.presenceStore.listOnlineDriverIds();
   }
 
   toPublicProfile(profile: DriverProfileEntity): {
@@ -99,11 +126,23 @@ export class DriversService {
     };
   }
 
-  private assertDriverRole(userId: string): void {
-    const user = this.usersService.findByIdOrThrow(userId);
+  private async assertDriverRole(userId: string): Promise<void> {
+    const user = await this.usersService.findByIdOrThrow(userId);
 
     if (user.role !== UserRole.DRIVER) {
       throw new ForbiddenException('Only drivers can access this endpoint.');
     }
+  }
+
+  private async syncPresence(
+    userId: string,
+    status: DriverStatus
+  ): Promise<void> {
+    if (status === DriverStatus.ONLINE) {
+      await this.presenceStore.setOnline(userId);
+      return;
+    }
+
+    await this.presenceStore.setOffline(userId);
   }
 }

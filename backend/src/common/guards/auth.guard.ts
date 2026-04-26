@@ -24,6 +24,10 @@ export class AuthGuard implements CanActivate {
   ) {}
 
   canActivate(context: ExecutionContext): boolean {
+    if (context.getType() !== 'http') {
+      return true;
+    }
+
     const isPublicRoute = this.reflector.getAllAndOverride<boolean>(PUBLIC_ROUTE_KEY, [
       context.getHandler(),
       context.getClass()

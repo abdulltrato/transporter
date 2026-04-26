@@ -14,12 +14,18 @@
     "@nestjs/core": "^11.0.6",
     "@nestjs/jwt": "^11.0.0",
     "@nestjs/platform-express": "^11.0.6",
+    "@nestjs/platform-socket.io": "^11.0.6",
+    "@nestjs/websockets": "^11.0.6",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "ioredis": "^5.8.1",
+    "pg": "^8.16.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "socket.io": "^4.8.1"
   },
   "devDependencies": {
+    "@types/pg": "^8.15.5",
     "@types/node": "^22.10.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.8.3"

@@ -10,12 +10,19 @@ export class RidesController {
   constructor(private readonly ridesService: RidesService) {}
 
   @Post('request')
-  requestRide(@CurrentUser() currentUser: RequestUser, @Body() body: RequestRideDto): ReturnType<RidesService['requestRide']> {
-    return this.ridesService.requestRide(currentUser, body.pickup, body.dropoff);
+  async requestRide(
+    @CurrentUser() currentUser: RequestUser,
+    @Body() body: RequestRideDto
+  ): ReturnType<RidesService['requestRide']> {
+    return this.ridesService.requestRide(
+      currentUser,
+      body.pickup,
+      body.dropoff
+    );
   }
 
   @Patch(':rideId/respond')
-  respondRide(
+  async respondRide(
     @CurrentUser() currentUser: RequestUser,
     @Param('rideId') rideId: string,
     @Body() body: RespondRideDto
@@ -24,7 +31,7 @@ export class RidesController {
   }
 
   @Patch(':rideId/cancel')
-  cancelRide(
+  async cancelRide(
     @CurrentUser() currentUser: RequestUser,
     @Param('rideId') rideId: string
   ): ReturnType<RidesService['cancelRide']> {
@@ -32,7 +39,9 @@ export class RidesController {
   }
 
   @Get('me')
-  listMyRides(@CurrentUser() currentUser: RequestUser): ReturnType<RidesService['listMyRides']> {
+  async listMyRides(
+    @CurrentUser() currentUser: RequestUser
+  ): ReturnType<RidesService['listMyRides']> {
     return this.ridesService.listMyRides(currentUser);
   }
 }

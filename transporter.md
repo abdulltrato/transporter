@@ -31,6 +31,8 @@ Principio adotado: **modulos pequenos e focados**, evitando arquivos grandes e a
 - `drivers/`: perfil operacional do taxista e status online/offline.
 - `location/`: atualizacao e consulta geografica.
 - `rides/`: solicitacao de corrida, atribuicao e resposta do taxista.
+- `database/`: conexao PostgreSQL e bootstrap de schema.
+- `redis/`: conexao Redis para presenca online e localizacao.
 - `common/`: enums, guardas, decorators e utilitarios compartilhados.
 
 ### 3.2 Fluxos de Negocio Implementados
@@ -119,6 +121,8 @@ Principio adotado: **modulos pequenos e focados**, evitando arquivos grandes e a
 - Logica de matching separada da logica de persistencia de corrida.
 - Sem arquivos monoliticos: preferencia por submodulos menores.
 - DTOs com `class-validator` para blindar entrada da API.
+- Repositorios de `users`, `drivers` e `rides` persistem em PostgreSQL.
+- Presenca online de taxistas e localizacao em tempo real persistidas em Redis.
 
 ## 7. Seguranca MVP
 
@@ -139,8 +143,10 @@ Para proxima iteracao:
 
 1. `cd backend`
 2. copiar `.env.example` para `.env`
-3. `npm install`
-4. `npm run start:dev`
+3. garantir PostgreSQL ativo e acessivel pelas variaveis do `.env`
+4. garantir Redis ativo e acessivel pelas variaveis do `.env`
+5. `npm install`
+6. `npm run start:dev`
 
 API disponivel em: `http://localhost:3000/api`
 
@@ -152,11 +158,10 @@ API disponivel em: `http://localhost:3000/api`
 
 ## 9. Proximos Passos Recomendados
 
-1. Substituir repositorios em memoria por PostgreSQL (users, drivers, rides).
-2. Mover localizacao e presenca online para Redis (baixa latencia).
-3. Adicionar websocket para atualizacao de mapa em tempo real.
-4. Implementar notificacoes push para novos pedidos de corrida.
-5. Criar testes E2E (auth, online/offline, ride matching, reatribuicao).
+1. Otimizar busca geoespacial em Redis (GEOSEARCH) para reduzir custo de filtro por distancia.
+2. Adicionar websocket para atualizacao de mapa em tempo real.
+3. Implementar notificacoes push para novos pedidos de corrida.
+4. Criar testes E2E (auth, online/offline, ride matching, reatribuicao).
 
 ## 10. Status Atual
 
