@@ -17,6 +17,7 @@ export class LocationController {
     private readonly realtimeEvents: RealtimeEventsService
   ) {}
 
+  @Put('me')
   async updateMyLocation(
     @CurrentUser() currentUser: RequestUser,
     @Body() body: UpdateMyLocationDto
@@ -41,7 +42,7 @@ export class LocationController {
     return updatedLocation;
   }
 
-  @Put('me')
+  @Get('me')
   getMyLocation(
     @CurrentUser() currentUser: RequestUser
   ): ReturnType<LocationService['getMyLocation']> {
