@@ -7,20 +7,19 @@ import '../../../services/rides_service.dart';
 import 'dropoff_map_picker_page.dart';
 
 class RidePage extends StatefulWidget {
-  const RidePage({
-    super.key,
-    required this.ridesService,
-    required this.realtimeMapService,
-    required this.pickup,
-    required this.hasLivePickup,
-    this.dropoff,
-    required this.onCaptureDropoffFromGps,
-    required this.onSelectDropoffFromMap,
-    required this.onClearDropoff,
-    this.locationWarning,
-    required this.token,
-    required this.role
-  });
+  const RidePage(
+      {super.key,
+      required this.ridesService,
+      required this.realtimeMapService,
+      required this.pickup,
+      required this.hasLivePickup,
+      this.dropoff,
+      required this.onCaptureDropoffFromGps,
+      required this.onSelectDropoffFromMap,
+      required this.onClearDropoff,
+      this.locationWarning,
+      required this.token,
+      required this.role});
 
   final RidesService ridesService;
   final RealtimeMapService realtimeMapService;
@@ -55,10 +54,10 @@ class _RidePageState extends State<RidePage> {
   @override
   void initState() {
     super.initState();
-    _rideUpdatesSubscription = widget.realtimeMapService.rideUpdatedStream.listen(
-      _onRideUpdated
-    );
-    _realtimeErrorsSubscription = widget.realtimeMapService.errorStream.listen((error) {
+    _rideUpdatesSubscription =
+        widget.realtimeMapService.rideUpdatedStream.listen(_onRideUpdated);
+    _realtimeErrorsSubscription =
+        widget.realtimeMapService.errorStream.listen((error) {
       if (!mounted) {
         return;
       }
@@ -165,10 +164,8 @@ class _RidePageState extends State<RidePage> {
     });
 
     try {
-      final ride = await widget.ridesService.requestRide(
-        pickup: widget.pickup,
-        dropoff: widget.dropoff
-      );
+      final ride = await widget.ridesService
+          .requestRide(pickup: widget.pickup, dropoff: widget.dropoff);
 
       if (!mounted) {
         return;
@@ -209,13 +206,9 @@ class _RidePageState extends State<RidePage> {
 
   Future<void> _pickDropoffFromMap() async {
     final selected = await Navigator.of(context).push<GeoPoint>(
-      MaterialPageRoute(
-        builder: (_) => DropoffMapPickerPage(
-          pickup: widget.pickup,
-          initialDropoff: widget.dropoff
-        )
-      )
-    );
+        MaterialPageRoute(
+            builder: (_) => DropoffMapPickerPage(
+                pickup: widget.pickup, initialDropoff: widget.dropoff)));
 
     if (!mounted || selected == null) {
       return;
@@ -273,16 +266,14 @@ class _RidePageState extends State<RidePage> {
 
   Future<void> _acceptActiveRide() async {
     await _respondActiveRide(
-      action: RideResponseAction.accept,
-      successMessage: 'Corrida aceite com sucesso.'
-    );
+        action: RideResponseAction.accept,
+        successMessage: 'Corrida aceite com sucesso.');
   }
 
   Future<void> _rejectActiveRide() async {
     await _respondActiveRide(
-      action: RideResponseAction.reject,
-      successMessage: 'Corrida rejeitada.'
-    );
+        action: RideResponseAction.reject,
+        successMessage: 'Corrida rejeitada.');
   }
 
   Future<void> _startActiveRide() async {
@@ -369,10 +360,9 @@ class _RidePageState extends State<RidePage> {
     }
   }
 
-  Future<void> _respondActiveRide({
-    required RideResponseAction action,
-    required String successMessage
-  }) async {
+  Future<void> _respondActiveRide(
+      {required RideResponseAction action,
+      required String successMessage}) async {
     if (!_isDriver) {
       _showMessage('Somente taxistas podem responder corridas.');
       return;
@@ -390,10 +380,8 @@ class _RidePageState extends State<RidePage> {
     });
 
     try {
-      final updatedRide = await widget.ridesService.respondToRide(
-        rideId: ride.id,
-        action: action
-      );
+      final updatedRide = await widget.ridesService
+          .respondToRide(rideId: ride.id, action: action);
       if (!mounted) {
         return;
       }
@@ -505,9 +493,8 @@ class _RidePageState extends State<RidePage> {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message))
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   String _formatGeoPoint(GeoPoint point) {
@@ -518,188 +505,148 @@ class _RidePageState extends State<RidePage> {
   Widget build(BuildContext context) {
     if (!_isAuthenticated) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Corrida')),
-        body: const Center(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Text(
-              'Entre na aba Acesso para solicitar corrida e receber atualizacoes em tempo real.'
-            )
-          )
-        )
-      );
+          appBar: AppBar(title: const Text('Corrida')),
+          body: const Center(
+              child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text(
+                      'Entre na aba Acesso para solicitar corrida e receber atualizacoes em tempo real.'))));
     }
 
     final activeRide = _activeRide;
-    final canCancel = _isClient && activeRide != null && _canCancelRide(activeRide);
-    final canRespond = _isDriver && activeRide != null && _canDriverRespondRide(activeRide);
-    final canStart = _isDriver && activeRide != null && _canDriverStartRide(activeRide);
-    final canComplete = _isDriver && activeRide != null && _canDriverCompleteRide(activeRide);
+    final canCancel =
+        _isClient && activeRide != null && _canCancelRide(activeRide);
+    final canRespond =
+        _isDriver && activeRide != null && _canDriverRespondRide(activeRide);
+    final canStart =
+        _isDriver && activeRide != null && _canDriverStartRide(activeRide);
+    final canComplete =
+        _isDriver && activeRide != null && _canDriverCompleteRide(activeRide);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Corrida'),
-        actions: [
+        appBar: AppBar(title: const Text('Corrida'), actions: [
           IconButton(
-            onPressed: _isLoading ? null : _loadMyRides,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Atualizar corridas'
-          )
-        ]
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+              onPressed: _isLoading ? null : _loadMyRides,
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Atualizar corridas')
+        ]),
+        body: ListView(padding: const EdgeInsets.all(16), children: [
           if (_isLoading) const LinearProgressIndicator(),
           if (_errorMessage != null) ...[
             const SizedBox(height: 12),
-            Text(
-              _errorMessage!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error)
-            )
+            Text(_errorMessage!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error))
           ],
           if (widget.locationWarning != null) ...[
             const SizedBox(height: 12),
-            Text(
-              widget.locationWarning!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error)
-            )
+            Text(widget.locationWarning!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error))
           ],
           const SizedBox(height: 12),
           Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Localizacao da corrida',
-                    style: TextStyle(fontWeight: FontWeight.w700)
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    widget.hasLivePickup
-                        ? 'Pickup atual: ${_formatGeoPoint(widget.pickup)}'
-                        : 'Pickup atual: aguardando GPS real'
-                  ),
-                  Text(
-                    widget.dropoff == null
-                        ? 'Dropoff: nao definido'
-                        : 'Dropoff: ${_formatGeoPoint(widget.dropoff!)}'
-                  ),
-                  if (_isClient) ...[
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
+              child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        FilledButton.tonalIcon(
-                          onPressed: _isLoading ? null : _pickDropoffFromMap,
-                          icon: const Icon(Icons.pin_drop),
-                          label: const Text('Selecionar no mapa')
-                        ),
-                        FilledButton.tonalIcon(
-                          onPressed: _isLoading ? null : _captureDropoffFromGps,
-                          icon: const Icon(Icons.my_location),
-                          label: const Text('Capturar dropoff por GPS')
-                        ),
-                        if (widget.dropoff != null)
-                          OutlinedButton(
-                            onPressed: _isLoading ? null : _clearDropoff,
-                            child: const Text('Limpar dropoff')
-                          )
-                      ]
-                    )
-                  ]
-                ]
-              )
-            )
-          ),
+                        const Text('Localizacao da corrida',
+                            style: TextStyle(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 8),
+                        Text(widget.hasLivePickup
+                            ? 'Pickup atual: ${_formatGeoPoint(widget.pickup)}'
+                            : 'Pickup atual: aguardando GPS real'),
+                        Text(widget.dropoff == null
+                            ? 'Dropoff: nao definido'
+                            : 'Dropoff: ${_formatGeoPoint(widget.dropoff!)}'),
+                        if (_isClient) ...[
+                          const SizedBox(height: 12),
+                          Wrap(spacing: 10, runSpacing: 10, children: [
+                            FilledButton.tonalIcon(
+                                onPressed:
+                                    _isLoading ? null : _pickDropoffFromMap,
+                                icon: const Icon(Icons.pin_drop),
+                                label: const Text('Selecionar no mapa')),
+                            FilledButton.tonalIcon(
+                                onPressed:
+                                    _isLoading ? null : _captureDropoffFromGps,
+                                icon: const Icon(Icons.my_location),
+                                label: const Text('Capturar dropoff por GPS')),
+                            if (widget.dropoff != null)
+                              OutlinedButton(
+                                  onPressed: _isLoading ? null : _clearDropoff,
+                                  child: const Text('Limpar dropoff'))
+                          ])
+                        ]
+                      ]))),
           const SizedBox(height: 12),
           Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Corrida ativa',
-                    style: TextStyle(fontWeight: FontWeight.w700)
-                  ),
-                  const SizedBox(height: 8),
-                  if (activeRide == null) const Text('Nenhuma corrida ativa no momento.'),
-                  if (activeRide != null) ...[
-                    Text('ID: ${activeRide.id}'),
-                    Text('Status: ${activeRide.status}'),
-                    Text('Motorista: ${activeRide.driverId ?? 'aguardando atribuicao'}')
-                  ],
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      if (_isClient)
-                        FilledButton(
-                          onPressed: _isLoading ? null : _requestRide,
-                          child: const Text('Solicitar corrida')
-                        ),
-                      if (!_isClient)
-                        const Text(
-                          'Conta de taxista: acompanhe atualizacoes de corrida em tempo real.'
-                        ),
-                      if (canRespond)
-                        FilledButton.tonal(
-                          onPressed: _isLoading ? null : _acceptActiveRide,
-                          child: const Text('Aceitar corrida')
-                        ),
-                      if (canRespond)
-                        OutlinedButton(
-                          onPressed: _isLoading ? null : _rejectActiveRide,
-                          child: const Text('Rejeitar corrida')
-                        ),
-                      if (canStart)
-                        FilledButton.tonal(
-                          onPressed: _isLoading ? null : _startActiveRide,
-                          child: const Text('Iniciar corrida')
-                        ),
-                      if (canComplete)
-                        FilledButton(
-                          onPressed: _isLoading ? null : _completeActiveRide,
-                          child: const Text('Finalizar corrida')
-                        ),
-                      if (canCancel)
-                        OutlinedButton(
-                          onPressed: _isLoading ? null : _cancelActiveRide,
-                          child: const Text('Cancelar corrida')
-                        )
-                    ]
-                  )
-                ]
-              )
-            )
-          ),
+              child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Corrida ativa',
+                            style: TextStyle(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 8),
+                        if (activeRide == null)
+                          const Text('Nenhuma corrida ativa no momento.'),
+                        if (activeRide != null) ...[
+                          Text('ID: ${activeRide.id}'),
+                          Text('Status: ${activeRide.status}'),
+                          Text(
+                              'Motorista: ${activeRide.driverId ?? 'aguardando atribuicao'}')
+                        ],
+                        const SizedBox(height: 12),
+                        Wrap(spacing: 10, runSpacing: 10, children: [
+                          if (_isClient)
+                            FilledButton(
+                                onPressed: _isLoading ? null : _requestRide,
+                                child: const Text('Solicitar corrida')),
+                          if (!_isClient)
+                            const Text(
+                                'Conta de taxista: acompanhe atualizacoes de corrida em tempo real.'),
+                          if (canRespond)
+                            FilledButton.tonal(
+                                onPressed:
+                                    _isLoading ? null : _acceptActiveRide,
+                                child: const Text('Aceitar corrida')),
+                          if (canRespond)
+                            OutlinedButton(
+                                onPressed:
+                                    _isLoading ? null : _rejectActiveRide,
+                                child: const Text('Rejeitar corrida')),
+                          if (canStart)
+                            FilledButton.tonal(
+                                onPressed: _isLoading ? null : _startActiveRide,
+                                child: const Text('Iniciar corrida')),
+                          if (canComplete)
+                            FilledButton(
+                                onPressed:
+                                    _isLoading ? null : _completeActiveRide,
+                                child: const Text('Finalizar corrida')),
+                          if (canCancel)
+                            OutlinedButton(
+                                onPressed:
+                                    _isLoading ? null : _cancelActiveRide,
+                                child: const Text('Cancelar corrida'))
+                        ])
+                      ]))),
           const SizedBox(height: 12),
-          const Text(
-            'Historico recente',
-            style: TextStyle(fontWeight: FontWeight.w700)
-          ),
+          const Text('Historico recente',
+              style: TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           if (_rides.isEmpty)
             const Text('Sem corridas registradas para esta sessao.')
           else
             ..._rides.take(10).map((ride) {
               return Card(
-                child: ListTile(
-                  title: Text('Corrida ${ride.id}'),
-                  subtitle: Text('Status: ${ride.status}'),
-                  trailing: Text(
-                    ride.driverId == null ? 'Sem motorista' : 'Com motorista'
-                  )
-                )
-              );
+                  child: ListTile(
+                      title: Text('Corrida ${ride.id}'),
+                      subtitle: Text('Status: ${ride.status}'),
+                      trailing: Text(ride.driverId == null
+                          ? 'Sem motorista'
+                          : 'Com motorista')));
             })
-        ]
-      )
-    );
+        ]));
   }
 }

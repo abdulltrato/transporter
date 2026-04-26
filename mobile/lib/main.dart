@@ -24,11 +24,10 @@ class TransporterApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Transporter',
-      debugShowCheckedModeBanner: false,
-      theme: buildAppTheme(),
-      home: const _HomeShell()
-    );
+        title: 'Transporter',
+        debugShowCheckedModeBanner: false,
+        theme: buildAppTheme(),
+        home: const _HomeShell());
   }
 }
 
@@ -80,12 +79,11 @@ class _HomeShellState extends State<_HomeShell> {
     super.dispose();
   }
 
-  Future<void> _handleLogin({
-    required String fullName,
-    required String phone,
-    required String code,
-    required String role
-  }) async {
+  Future<void> _handleLogin(
+      {required String fullName,
+      required String phone,
+      required String code,
+      required String role}) async {
     final sanitizedName = fullName.trim();
     final sanitizedPhone = phone.trim();
     final sanitizedCode = code.trim();
@@ -104,11 +102,10 @@ class _HomeShellState extends State<_HomeShell> {
       final devCode = await _authService.requestOtp(sanitizedPhone);
       final verificationCode = sanitizedCode.isEmpty ? devCode : sanitizedCode;
       final accessToken = await _authService.verifyOtp(
-        phone: sanitizedPhone,
-        code: verificationCode,
-        role: role,
-        fullName: sanitizedName
-      );
+          phone: sanitizedPhone,
+          code: verificationCode,
+          role: role,
+          fullName: sanitizedName);
 
       _apiClient.token = accessToken;
       _realtimeMapService.connect(token: accessToken);
@@ -145,43 +142,41 @@ class _HomeShellState extends State<_HomeShell> {
     final pages = [
       LoginPage(onSubmit: _handleLogin),
       MapPage(
-        locationService: _locationService,
-        realtimeMapService: _realtimeMapService,
-        origin: origin,
-        radiusKm: _defaultRadiusKm,
-        token: _accessToken
-      ),
+          locationService: _locationService,
+          realtimeMapService: _realtimeMapService,
+          origin: origin,
+          radiusKm: _defaultRadiusKm,
+          token: _accessToken),
       RidePage(
-        ridesService: _ridesService,
-        realtimeMapService: _realtimeMapService,
-        pickup: origin,
-        hasLivePickup: _currentLocation != null,
-        dropoff: _dropoffLocation,
-        onCaptureDropoffFromGps: _captureDropoffFromGps,
-        onSelectDropoffFromMap: _setDropoffFromMap,
-        onClearDropoff: _clearDropoff,
-        locationWarning: _locationWarning,
-        token: _accessToken,
-        role: _currentRole
-      )
+          ridesService: _ridesService,
+          realtimeMapService: _realtimeMapService,
+          pickup: origin,
+          hasLivePickup: _currentLocation != null,
+          dropoff: _dropoffLocation,
+          onCaptureDropoffFromGps: _captureDropoffFromGps,
+          onSelectDropoffFromMap: _setDropoffFromMap,
+          onClearDropoff: _clearDropoff,
+          locationWarning: _locationWarning,
+          token: _accessToken,
+          role: _currentRole)
     ];
 
     return Scaffold(
-      body: pages[_selectedIndex],
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.lock_open), label: 'Acesso'),
-          NavigationDestination(icon: Icon(Icons.map), label: 'Mapa'),
-          NavigationDestination(icon: Icon(Icons.directions_bike), label: 'Corrida')
-        ],
-        onDestinationSelected: (value) {
-          setState(() {
-            _selectedIndex = value;
-          });
-        }
-      )
-    );
+        body: pages[_selectedIndex],
+        bottomNavigationBar: NavigationBar(
+            selectedIndex: _selectedIndex,
+            destinations: const [
+              NavigationDestination(
+                  icon: Icon(Icons.lock_open), label: 'Acesso'),
+              NavigationDestination(icon: Icon(Icons.map), label: 'Mapa'),
+              NavigationDestination(
+                  icon: Icon(Icons.directions_bike), label: 'Corrida')
+            ],
+            onDestinationSelected: (value) {
+              setState(() {
+                _selectedIndex = value;
+              });
+            }));
   }
 
   void _showMessage(String message) {
@@ -189,9 +184,8 @@ class _HomeShellState extends State<_HomeShell> {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message))
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _startLocationTracking() async {
@@ -227,28 +221,26 @@ class _HomeShellState extends State<_HomeShell> {
     if (previousSubscription != null) {
       await previousSubscription.cancel();
     }
-    _locationSubscription = _deviceLocationService.positionStream().listen(
-      (point) {
-        if (!mounted) {
-          return;
-        }
-
-        setState(() {
-          _currentLocation = point;
-        });
-
-        unawaited(_syncMyLocation(point));
-      },
-      onError: (Object error) {
-        if (!mounted) {
-          return;
-        }
-
-        setState(() {
-          _locationWarning = 'Falha ao ler GPS: $error';
-        });
+    _locationSubscription =
+        _deviceLocationService.positionStream().listen((point) {
+      if (!mounted) {
+        return;
       }
-    );
+
+      setState(() {
+        _currentLocation = point;
+      });
+
+      unawaited(_syncMyLocation(point));
+    }, onError: (Object error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _locationWarning = 'Falha ao ler GPS: $error';
+      });
+    });
   }
 
   Future<void> _syncMyLocation(GeoPoint point) async {
