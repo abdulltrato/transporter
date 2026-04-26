@@ -7,6 +7,7 @@ import {
 import { RideStatus } from '../../common/enums/ride-status.enum';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
+import { RealtimeEventsService } from '../../realtime/events/realtime-events.service';
 import { RidesRepository } from '../repositories/rides.repository';
 import { RideEntity } from '../entities/ride.entity';
 import { RideResponseAction } from '../dto/respond-ride.dto';
@@ -16,7 +17,8 @@ import { DriverMatchingService } from './driver-matching.service';
 export class RidesService {
   constructor(
     private readonly ridesRepository: RidesRepository,
-    private readonly matchingService: DriverMatchingService
+    private readonly matchingService: DriverMatchingService,
+    private readonly realtimeEvents: RealtimeEventsService
   ) {}
 
   async requestRide(
@@ -30,25 +32,30 @@ export class RidesService {
 
     const match = await this.matchingService.findClosestDriver({ pickup });
 
+    let ride: RideEntity;
+
     if (!match) {
-      return this.ridesRepository.create({
+      ride = await this.ridesRepository.create({
         clientId: currentUser.id,
         pickup,
         dropoff,
         status: RideStatus.SEARCHING,
         rejectedDriverIds: []
       });
+    } else {
+      ride = await this.ridesRepository.create({
+        clientId: currentUser.id,
+        pickup,
+        dropoff,
+        status: RideStatus.ASSIGNED,
+        driverId: match.driverId,
+        searchRadiusKm: match.radiusKm,
+        rejectedDriverIds: []
+      });
     }
 
-    return this.ridesRepository.create({
-      clientId: currentUser.id,
-      pickup,
-      dropoff,
-      status: RideStatus.ASSIGNED,
-      driverId: match.driverId,
-      searchRadiusKm: match.radiusKm,
-      rejectedDriverIds: []
-    });
+    this.realtimeEvents.emitRideUpdated(ride);
+    return ride;
   }
 
   async respondToRide(
@@ -71,10 +78,13 @@ export class RidesService {
     }
 
     if (action === RideResponseAction.ACCEPT) {
-      return this.ridesRepository.save({
+      const acceptedRide = await this.ridesRepository.save({
         ...ride,
         status: RideStatus.ACCEPTED
       });
+
+      this.realtimeEvents.emitRideUpdated(acceptedRide);
+      return acceptedRide;
     }
 
     const rejectedDriverIds = [...new Set([...ride.rejectedDriverIds, currentUser.id])];
@@ -84,22 +94,28 @@ export class RidesService {
     });
 
     if (!nextMatch) {
-      return this.ridesRepository.save({
+      const updatedRide = await this.ridesRepository.save({
         ...ride,
         status: RideStatus.SEARCHING,
         driverId: undefined,
         searchRadiusKm: undefined,
         rejectedDriverIds
       });
+
+      this.realtimeEvents.emitRideUpdated(updatedRide);
+      return updatedRide;
     }
 
-    return this.ridesRepository.save({
+    const reassignedRide = await this.ridesRepository.save({
       ...ride,
       status: RideStatus.ASSIGNED,
       driverId: nextMatch.driverId,
       searchRadiusKm: nextMatch.radiusKm,
       rejectedDriverIds
     });
+
+    this.realtimeEvents.emitRideUpdated(reassignedRide);
+    return reassignedRide;
   }
 
   async cancelRide(currentUser: RequestUser, rideId: string): Promise<RideEntity> {
@@ -113,10 +129,13 @@ export class RidesService {
       throw new BadRequestException('Ride is already closed.');
     }
 
-    return this.ridesRepository.save({
+    const cancelledRide = await this.ridesRepository.save({
       ...ride,
       status: RideStatus.CANCELLED
     });
+
+    this.realtimeEvents.emitRideUpdated(cancelledRide);
+    return cancelledRide;
   }
 
   async listMyRides(currentUser: RequestUser): Promise<RideEntity[]> {
