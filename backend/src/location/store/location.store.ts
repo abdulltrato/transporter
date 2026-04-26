@@ -8,9 +8,15 @@ export interface UserLocationRecord {
   updatedAt: Date;
 }
 
+export interface GeoSearchResult {
+  userId: string;
+  distanceKm: number;
+}
+
 @Injectable()
 export class LocationStore {
   private readonly keyPrefix = 'transporter:location:';
+  private readonly geoIndexKey = 'transporter:location:geo';
   private readonly defaultTtlSeconds = Number(
     process.env.LOCATION_TTL_SECONDS ?? 1800
   );
@@ -25,15 +31,24 @@ export class LocationStore {
     };
 
     const key = this.getKey(userId);
-    await this.redisService.getClient().hset(key, {
+    const pipeline = this.redisService.getClient().pipeline();
+    pipeline.hset(key, {
       lat: String(coordinates.lat),
       lng: String(coordinates.lng),
       updatedAt: record.updatedAt.toISOString()
     });
 
     if (this.defaultTtlSeconds > 0) {
-      await this.redisService.getClient().expire(key, this.defaultTtlSeconds);
+      pipeline.expire(key, this.defaultTtlSeconds);
     }
+
+    pipeline.geoadd(
+      this.geoIndexKey,
+      coordinates.lng,
+      coordinates.lat,
+      userId
+    );
+    await pipeline.exec();
 
     return record;
   }
@@ -72,6 +87,40 @@ export class LocationStore {
       .filter((item): item is UserLocationRecord => Boolean(item));
   }
 
+  async searchNearbyByRadius(
+    origin: GeoPoint,
+    radiusKm: number
+  ): Promise<GeoSearchResult[]> {
+    const rawResults = await this.redisService.getClient().call(
+      'GEOSEARCH',
+      this.geoIndexKey,
+      'FROMLONLAT',
+      String(origin.lng),
+      String(origin.lat),
+      'BYRADIUS',
+      String(radiusKm),
+      'km',
+      'WITHDIST',
+      'ASC'
+    );
+
+    if (!Array.isArray(rawResults)) {
+      return [];
+    }
+
+    return rawResults
+      .map((rawResult) => this.toGeoSearchResult(rawResult))
+      .filter((item): item is GeoSearchResult => Boolean(item));
+  }
+
+  async removeManyFromGeoIndex(userIds: string[]): Promise<void> {
+    if (userIds.length === 0) {
+      return;
+    }
+
+    await this.redisService.getClient().zrem(this.geoIndexKey, ...userIds);
+  }
+
   private getKey(userId: string): string {
     return `${this.keyPrefix}${userId}`;
   }
@@ -97,5 +146,32 @@ export class LocationStore {
       coordinates: { lat, lng },
       updatedAt
     };
+  }
+
+  private toGeoSearchResult(rawResult: unknown): GeoSearchResult | undefined {
+    if (!Array.isArray(rawResult) || rawResult.length < 2) {
+      return undefined;
+    }
+
+    const userId = this.toString(rawResult[0]);
+    const distanceKm = Number(this.toString(rawResult[1]));
+
+    if (!userId || !Number.isFinite(distanceKm)) {
+      return undefined;
+    }
+
+    return { userId, distanceKm };
+  }
+
+  private toString(value: unknown): string {
+    if (typeof value === 'string') {
+      return value;
+    }
+
+    if (Buffer.isBuffer(value)) {
+      return value.toString('utf8');
+    }
+
+    return String(value);
   }
 }

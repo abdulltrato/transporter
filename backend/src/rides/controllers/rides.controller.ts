@@ -38,6 +38,22 @@ export class RidesController {
     return this.ridesService.cancelRide(currentUser, rideId);
   }
 
+  @Patch(':rideId/start')
+  async startRide(
+    @CurrentUser() currentUser: RequestUser,
+    @Param('rideId') rideId: string
+  ): ReturnType<RidesService['startRide']> {
+    return this.ridesService.startRide(currentUser, rideId);
+  }
+
+  @Patch(':rideId/complete')
+  async completeRide(
+    @CurrentUser() currentUser: RequestUser,
+    @Param('rideId') rideId: string
+  ): ReturnType<RidesService['completeRide']> {
+    return this.ridesService.completeRide(currentUser, rideId);
+  }
+
   @Get('me')
   async listMyRides(
     @CurrentUser() currentUser: RequestUser

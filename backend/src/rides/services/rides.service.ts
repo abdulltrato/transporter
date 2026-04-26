@@ -138,6 +138,54 @@ export class RidesService {
     return cancelledRide;
   }
 
+  async startRide(currentUser: RequestUser, rideId: string): Promise<RideEntity> {
+    if (currentUser.role !== UserRole.DRIVER) {
+      throw new ForbiddenException('Only drivers can start rides.');
+    }
+
+    const ride = await this.findByIdOrThrow(rideId);
+
+    if (ride.driverId !== currentUser.id) {
+      throw new ForbiddenException('This ride is not assigned to this driver.');
+    }
+
+    if (ride.status !== RideStatus.ACCEPTED) {
+      throw new BadRequestException('Ride must be accepted before start.');
+    }
+
+    const startedRide = await this.ridesRepository.save({
+      ...ride,
+      status: RideStatus.IN_PROGRESS
+    });
+
+    this.realtimeEvents.emitRideUpdated(startedRide);
+    return startedRide;
+  }
+
+  async completeRide(currentUser: RequestUser, rideId: string): Promise<RideEntity> {
+    if (currentUser.role !== UserRole.DRIVER) {
+      throw new ForbiddenException('Only drivers can complete rides.');
+    }
+
+    const ride = await this.findByIdOrThrow(rideId);
+
+    if (ride.driverId !== currentUser.id) {
+      throw new ForbiddenException('This ride is not assigned to this driver.');
+    }
+
+    if (ride.status !== RideStatus.IN_PROGRESS) {
+      throw new BadRequestException('Ride must be in progress before completion.');
+    }
+
+    const completedRide = await this.ridesRepository.save({
+      ...ride,
+      status: RideStatus.COMPLETED
+    });
+
+    this.realtimeEvents.emitRideUpdated(completedRide);
+    return completedRide;
+  }
+
   async listMyRides(currentUser: RequestUser): Promise<RideEntity[]> {
     if (currentUser.role === UserRole.CLIENT) {
       return this.ridesRepository.listByClientId(currentUser.id);

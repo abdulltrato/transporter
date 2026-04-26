@@ -4,6 +4,9 @@ backend/dist/
 backend/.env
 npm-debug.log*
 
+# Local Flutter SDK (installed in-repo)
+flutter/
+
 # Mobile (Flutter)
 mobile/.dart_tool/
 mobile/.packages

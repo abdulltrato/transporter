@@ -5,8 +5,12 @@ class AuthService {
 
   final ApiClient _apiClient;
 
-  Future<void> requestOtp(String phone) async {
-    await _apiClient.post('/api/auth/request-otp', {'phone': phone});
+  Future<String> requestOtp(String phone) async {
+    final response = await _apiClient.post('/api/auth/request-otp', {
+      'phone': phone
+    }) as Map<String, dynamic>;
+
+    return response['devCode'] as String;
   }
 
   Future<String> verifyOtp({

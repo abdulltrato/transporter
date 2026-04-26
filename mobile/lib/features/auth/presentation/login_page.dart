@@ -66,7 +66,10 @@ class _LoginPageState extends State<LoginPage> {
           TextField(
             controller: _codeController,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'Codigo OTP')
+            decoration: const InputDecoration(
+              labelText: 'Codigo OTP (opcional em dev)',
+              helperText: 'Deixe vazio para usar o devCode automaticamente.'
+            )
           ),
           const SizedBox(height: 12),
           SegmentedButton<String>(

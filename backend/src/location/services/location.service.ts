@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { GeoPoint } from '../../common/interfaces/geo-point.interface';
-import { calculateDistanceInKm } from '../../common/utils/distance.util';
 import { LocationStore, UserLocationRecord } from '../store/location.store';
 
 export interface NearbyDriver {
@@ -35,31 +34,53 @@ export class LocationService {
     const candidateDriverIds = input.candidateDriverIds.filter(
       (driverId) => !excluded.has(driverId)
     );
-    const locations = await this.locationStore.listByUserIds(candidateDriverIds);
+    const candidateDriverIdSet = new Set(candidateDriverIds);
+
+    if (candidateDriverIdSet.size === 0) {
+      return [];
+    }
+
+    const nearbyByGeo = await this.locationStore.searchNearbyByRadius(
+      input.origin,
+      input.radiusKm
+    );
+    const filteredNearby = nearbyByGeo.filter((driver) =>
+      candidateDriverIdSet.has(driver.userId)
+    );
+
+    if (filteredNearby.length === 0) {
+      return [];
+    }
+
+    const locations = await this.locationStore.listByUserIds(
+      filteredNearby.map((driver) => driver.userId)
+    );
     const locationByDriverId = new Map(
       locations.map((location) => [location.userId, location])
     );
 
-    return candidateDriverIds
-      .map((driverId) => {
-        const location = locationByDriverId.get(driverId);
+    const staleDriverIds: string[] = [];
+    const nearbyDrivers = filteredNearby
+      .map((candidate) => {
+        const location = locationByDriverId.get(candidate.userId);
         if (!location) {
-          return undefined;
-        }
-
-        const distanceKm = calculateDistanceInKm(input.origin, location.coordinates);
-        if (distanceKm > input.radiusKm) {
+          staleDriverIds.push(candidate.userId);
           return undefined;
         }
 
         return {
-          driverId,
+          driverId: candidate.userId,
           coordinates: location.coordinates,
-          distanceKm,
+          distanceKm: candidate.distanceKm,
           updatedAt: location.updatedAt
         } satisfies NearbyDriver;
       })
-      .filter((item): item is NearbyDriver => Boolean(item))
-      .sort((a, b) => a.distanceKm - b.distanceKm);
+      .filter((item): item is NearbyDriver => Boolean(item));
+
+    if (staleDriverIds.length > 0) {
+      await this.locationStore.removeManyFromGeoIndex(staleDriverIds);
+    }
+
+    return nearbyDrivers;
   }
 }

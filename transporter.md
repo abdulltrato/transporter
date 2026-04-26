@@ -31,6 +31,7 @@ Principio adotado: **modulos pequenos e focados**, evitando arquivos grandes e a
 - `drivers/`: perfil operacional do taxista e status online/offline.
 - `location/`: atualizacao e consulta geografica.
 - `rides/`: solicitacao de corrida, atribuicao e resposta do taxista.
+- `realtime/`: gateway websocket para eventos em tempo real (mapa e corridas).
 - `database/`: conexao PostgreSQL e bootstrap de schema.
 - `redis/`: conexao Redis para presenca online e localizacao.
 - `common/`: enums, guardas, decorators e utilitarios compartilhados.
@@ -56,6 +57,11 @@ Principio adotado: **modulos pequenos e focados**, evitando arquivos grandes e a
 - prioridade pelo taxista mais proximo;
 - reatribuicao automatica se taxista rejeitar.
 
+5. **Tempo real (WebSocket)**
+- autenticacao JWT no handshake;
+- canal de mapa com eventos de status/localizacao de taxistas online;
+- canal de corrida com eventos de atualizacao para cliente e taxista envolvidos.
+
 ### 3.3 Endpoints MVP
 
 - `POST /api/auth/request-otp`
@@ -71,7 +77,12 @@ Principio adotado: **modulos pequenos e focados**, evitando arquivos grandes e a
 - `POST /api/rides/request`
 - `PATCH /api/rides/:rideId/respond`
 - `PATCH /api/rides/:rideId/cancel`
+- `PATCH /api/rides/:rideId/start`
+- `PATCH /api/rides/:rideId/complete`
 - `GET /api/rides/me`
+- `WS /realtime`:
+  - receber: `auth:error`, `map:snapshot`, `driver:status`, `driver:location`, `ride:updated`
+  - enviar: `map:subscribe`, `map:unsubscribe`
 
 ## 4. Modelo de Dados (MVP)
 
@@ -100,7 +111,7 @@ Principio adotado: **modulos pequenos e focados**, evitando arquivos grandes e a
 - `driverId` (opcional)
 - `pickup`
 - `dropoff` (opcional)
-- `status` (`searching`, `assigned`, `accepted`, `cancelled`, etc.)
+- `status` (`searching`, `assigned`, `accepted`, `in_progress`, `cancelled`, `completed`, etc.)
 - `searchRadiusKm`
 - `rejectedDriverIds`
 
@@ -112,7 +123,7 @@ Principio adotado: **modulos pequenos e focados**, evitando arquivos grandes e a
 - `features/map/presentation/`: tela de taxistas proximos.
 - `features/ride/presentation/`: inicio do fluxo de corrida.
 - `models/`: modelos de dominio (`Driver`, `Ride`, `GeoPoint`).
-- `services/`: cliente HTTP e servicos de integracao.
+- `services/`: cliente HTTP, autenticacao OTP, localizacao e websocket realtime.
 
 ## 6. Regras Tecnicas e de Manutencao
 
@@ -123,6 +134,7 @@ Principio adotado: **modulos pequenos e focados**, evitando arquivos grandes e a
 - DTOs com `class-validator` para blindar entrada da API.
 - Repositorios de `users`, `drivers` e `rides` persistem em PostgreSQL.
 - Presenca online de taxistas e localizacao em tempo real persistidas em Redis.
+- Busca de taxistas proximos otimizada com indice geoespacial Redis (`GEOSEARCH`).
 
 ## 7. Seguranca MVP
 
@@ -158,10 +170,10 @@ API disponivel em: `http://localhost:3000/api`
 
 ## 9. Proximos Passos Recomendados
 
-1. Otimizar busca geoespacial em Redis (GEOSEARCH) para reduzir custo de filtro por distancia.
-2. Adicionar websocket para atualizacao de mapa em tempo real.
-3. Implementar notificacoes push para novos pedidos de corrida.
-4. Criar testes E2E (auth, online/offline, ride matching, reatribuicao).
+1. Implementar notificacoes push para novos pedidos de corrida.
+2. Criar testes E2E (auth, online/offline, ride matching, reatribuicao).
+3. Integrar GPS real no mobile para pickup/dropoff dinamicos em vez de coordenadas fixas.
+4. Persistir historico analitico de busca/matching para observabilidade operacional.
 
 ## 10. Status Atual
 

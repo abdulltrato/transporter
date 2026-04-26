@@ -16,12 +16,37 @@ class Driver {
   final bool isOnline;
 
   factory Driver.fromJson(Map<String, dynamic> json) {
+    final id = (json['userId'] ?? json['driverId'] ?? '').toString();
+    final locationPayload = json['location'] ?? json['coordinates'];
+    final location = locationPayload is Map
+        ? locationPayload.map((key, value) => MapEntry(key.toString(), value))
+        : const <String, dynamic>{};
+    final baseName = (json['name'] as String?)?.trim();
+    final fallbackId = id.isEmpty ? 'sem-id' : id;
+
     return Driver(
-      userId: json['userId'] as String,
-      name: json['name'] as String? ?? 'Taxista',
+      userId: id,
+      name: (baseName == null || baseName.isEmpty)
+          ? 'Taxista ${fallbackId.length > 6 ? fallbackId.substring(0, 6) : fallbackId}'
+          : baseName,
       distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0,
-      location: GeoPoint.fromJson(json['location'] as Map<String, dynamic>),
+      location: GeoPoint.fromJson(location),
       isOnline: json['isOnline'] as bool? ?? true
+    );
+  }
+
+  Driver copyWith({
+    String? name,
+    double? distanceKm,
+    GeoPoint? location,
+    bool? isOnline
+  }) {
+    return Driver(
+      userId: userId,
+      name: name ?? this.name,
+      distanceKm: distanceKm ?? this.distanceKm,
+      location: location ?? this.location,
+      isOnline: isOnline ?? this.isOnline
     );
   }
 }

@@ -81,13 +81,37 @@ export class DatabaseService
         dropoff_lat DOUBLE PRECISION,
         dropoff_lng DOUBLE PRECISION,
         status TEXT NOT NULL CHECK (
-          status IN ('searching', 'assigned', 'accepted', 'rejected', 'cancelled', 'completed')
+          status IN (
+            'searching',
+            'assigned',
+            'accepted',
+            'in_progress',
+            'rejected',
+            'cancelled',
+            'completed'
+          )
         ),
         search_radius_km DOUBLE PRECISION,
         rejected_driver_ids TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
         created_at TIMESTAMPTZ NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL
       );
+
+      ALTER TABLE rides
+        DROP CONSTRAINT IF EXISTS rides_status_check;
+
+      ALTER TABLE rides
+        ADD CONSTRAINT rides_status_check CHECK (
+          status IN (
+            'searching',
+            'assigned',
+            'accepted',
+            'in_progress',
+            'rejected',
+            'cancelled',
+            'completed'
+          )
+        );
 
       CREATE INDEX IF NOT EXISTS idx_rides_client_created_at
         ON rides(client_id, created_at DESC);
