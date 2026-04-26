@@ -1,0 +1,20 @@
+# Backend (Node/NestJS)
+backend/node_modules/
+backend/dist/
+backend/.env
+npm-debug.log*
+
+# Mobile (Flutter)
+mobile/.dart_tool/
+mobile/.packages
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.metadata
+mobile/build/
+
+# IDE / OS
+.vscode/
+.idea/
+*.iml
+Thumbs.db
+.DS_Store
