@@ -158,6 +158,7 @@ class _HomeShellState extends State<_HomeShell> {
         hasLivePickup: _currentLocation != null,
         dropoff: _dropoffLocation,
         onCaptureDropoffFromGps: _captureDropoffFromGps,
+        onSelectDropoffFromMap: _setDropoffFromMap,
         onClearDropoff: _clearDropoff,
         locationWarning: _locationWarning,
         token: _accessToken,
@@ -302,6 +303,16 @@ class _HomeShellState extends State<_HomeShell> {
 
     unawaited(_syncMyLocation(position));
     return position;
+  }
+
+  void _setDropoffFromMap(GeoPoint point) {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _dropoffLocation = point;
+    });
   }
 
   void _clearDropoff() {

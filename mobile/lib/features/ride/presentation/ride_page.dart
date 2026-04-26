@@ -4,6 +4,7 @@ import '../../../models/geo_point.dart';
 import '../../../models/ride.dart';
 import '../../../services/realtime_map_service.dart';
 import '../../../services/rides_service.dart';
+import 'dropoff_map_picker_page.dart';
 
 class RidePage extends StatefulWidget {
   const RidePage({
@@ -14,6 +15,7 @@ class RidePage extends StatefulWidget {
     required this.hasLivePickup,
     this.dropoff,
     required this.onCaptureDropoffFromGps,
+    required this.onSelectDropoffFromMap,
     required this.onClearDropoff,
     this.locationWarning,
     required this.token,
@@ -26,6 +28,7 @@ class RidePage extends StatefulWidget {
   final bool hasLivePickup;
   final GeoPoint? dropoff;
   final Future<GeoPoint?> Function() onCaptureDropoffFromGps;
+  final ValueChanged<GeoPoint> onSelectDropoffFromMap;
   final VoidCallback onClearDropoff;
   final String? locationWarning;
   final String? token;
@@ -202,6 +205,24 @@ class _RidePageState extends State<RidePage> {
     }
 
     _showMessage('Destino atualizado para ${_formatGeoPoint(point)}');
+  }
+
+  Future<void> _pickDropoffFromMap() async {
+    final selected = await Navigator.of(context).push<GeoPoint>(
+      MaterialPageRoute(
+        builder: (_) => DropoffMapPickerPage(
+          pickup: widget.pickup,
+          initialDropoff: widget.dropoff
+        )
+      )
+    );
+
+    if (!mounted || selected == null) {
+      return;
+    }
+
+    widget.onSelectDropoffFromMap(selected);
+    _showMessage('Destino definido no mapa: ${_formatGeoPoint(selected)}');
   }
 
   void _clearDropoff() {
@@ -572,6 +593,11 @@ class _RidePageState extends State<RidePage> {
                       spacing: 10,
                       runSpacing: 10,
                       children: [
+                        FilledButton.tonalIcon(
+                          onPressed: _isLoading ? null : _pickDropoffFromMap,
+                          icon: const Icon(Icons.pin_drop),
+                          label: const Text('Selecionar no mapa')
+                        ),
                         FilledButton.tonalIcon(
                           onPressed: _isLoading ? null : _captureDropoffFromGps,
                           icon: const Icon(Icons.my_location),
