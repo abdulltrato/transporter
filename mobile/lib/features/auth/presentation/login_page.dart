@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../../models/driver_subscription.dart';
 
 class LoginPage extends StatefulWidget {
@@ -25,8 +26,7 @@ class LoginPage extends StatefulWidget {
     String? documentExpiry,
     String? neighborhood,
     String? operatingRegion,
-  })
-  onSubmit;
+  }) onSubmit;
   final Future<void> Function({
     required String provider,
     required String role,
@@ -35,20 +35,17 @@ class LoginPage extends StatefulWidget {
     String? documentExpiry,
     String? neighborhood,
     String? operatingRegion,
-  })
-  onSocialAuth;
+  }) onSocialAuth;
   final Future<List<DriverSubscription>> Function({
     required String agentKey,
-  })
-  onLoadPendingSubscriptionsForAgent;
+  }) onLoadPendingSubscriptionsForAgent;
   final Future<DriverSubscription> Function({
     required String agentKey,
     required String subscriptionId,
     required String action,
     required String agentName,
     String? notes,
-  })
-  onValidateSubscriptionForAgent;
+  }) onValidateSubscriptionForAgent;
   final bool isAuthenticated;
   final String? currentRole;
   final Future<void> Function() onLogout;
@@ -72,6 +69,7 @@ class _LoginPageState extends State<LoginPage> {
   final _agentNameController = TextEditingController();
   final _agentNotesController = TextEditingController();
   String _role = 'client';
+  bool _otpRequested = false;
   bool _isLoading = false;
   bool _isAgentLoading = false;
   bool _isValidatingSubscription = false;
@@ -81,7 +79,16 @@ class _LoginPageState extends State<LoginPage> {
   bool get _isDriver => _role == 'driver';
 
   @override
+  void initState() {
+    super.initState();
+    _nameController.addListener(_onAuthIdentityChanged);
+    _phoneController.addListener(_onAuthIdentityChanged);
+  }
+
+  @override
   void dispose() {
+    _nameController.removeListener(_onAuthIdentityChanged);
+    _phoneController.removeListener(_onAuthIdentityChanged);
     _nameController.dispose();
     _phoneController.dispose();
     _codeController.dispose();
@@ -95,19 +102,83 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant LoginPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isAuthenticated && !oldWidget.isAuthenticated) {
+      _resetOtpStep(clearCode: true);
+    }
+  }
+
+  void _onAuthIdentityChanged() {
+    if (!_otpRequested && _codeController.text.isEmpty) {
+      return;
+    }
+    _resetOtpStep(clearCode: true);
+  }
+
+  void _resetOtpStep({required bool clearCode}) {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _otpRequested = false;
+      if (clearCode) {
+        _codeController.clear();
+      }
+    });
+  }
+
   Future<void> _submit() async {
+    if (_otpRequested && _codeController.text.trim().isEmpty) {
+      _showMessage('Introduza o código OTP para concluir o login/cadastro.');
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
+      final isRequestStep = !_otpRequested;
       await widget.onSubmit(
         fullName: _nameController.text.trim(),
         phone: _phoneController.text.trim(),
-        code: _codeController.text.trim(),
+        code: isRequestStep ? '' : _codeController.text.trim(),
         role: _role,
         documentId: _documentIdController.text.trim(),
         documentExpiry: _documentExpiryController.text.trim(),
         neighborhood: _neighborhoodController.text.trim(),
         operatingRegion: _operatingRegionController.text.trim(),
       );
+      if (mounted && isRequestStep) {
+        setState(() {
+          _otpRequested = true;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _requestNewOtp() async {
+    setState(() => _isLoading = true);
+    try {
+      await widget.onSubmit(
+        fullName: _nameController.text.trim(),
+        phone: _phoneController.text.trim(),
+        code: '',
+        role: _role,
+        documentId: _documentIdController.text.trim(),
+        documentExpiry: _documentExpiryController.text.trim(),
+        neighborhood: _neighborhoodController.text.trim(),
+        operatingRegion: _operatingRegionController.text.trim(),
+      );
+      if (mounted) {
+        setState(() {
+          _otpRequested = true;
+        });
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -269,6 +340,13 @@ class _LoginPageState extends State<LoginPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Center(
+                    child: SvgPicture.asset(
+                      'assets/images/logo.svg',
+                      height: 72,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   Text(
                     'Acesso rápido',
                     style: theme.textTheme.titleMedium?.copyWith(
@@ -334,17 +412,6 @@ class _LoginPageState extends State<LoginPage> {
               prefixIcon: Icon(Icons.phone_outlined),
             ),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _codeController,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Código OTP (opcional em dev)',
-              helperText:
-                  'Pode deixar vazio para usar o código de desenvolvimento.',
-              prefixIcon: Icon(Icons.lock_clock_outlined),
-            ),
-          ),
           if (_isDriver) ...[
             const SizedBox(height: 12),
             TextField(
@@ -405,6 +472,8 @@ class _LoginPageState extends State<LoginPage> {
                     onSelectionChanged: (selection) {
                       setState(() {
                         _role = selection.first;
+                        _otpRequested = false;
+                        _codeController.clear();
                       });
                     },
                   ),
@@ -412,12 +481,34 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
           ),
+          if (_otpRequested) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _codeController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Código OTP',
+                helperText:
+                    'Este campo aparece após solicitar início de sessão/cadastro.',
+                prefixIcon: Icon(Icons.lock_clock_outlined),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _isLoading ? null : _requestNewOtp,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Reenviar OTP'),
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           Card(
             child: SwitchListTile(
               value: widget.isRobustModeEnabled,
               onChanged: _isLoading ? null : widget.onRobustModeChanged,
-              title: const Text('Modo nativo robusto'),
+              title: const Text('Aumentar potencia de busca'),
               subtitle: const Text(
                 'Ativa retentativas automáticas e fila de sincronização de localização.',
               ),
@@ -426,8 +517,14 @@ class _LoginPageState extends State<LoginPage> {
           const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: _isLoading ? null : _submit,
-            icon: const Icon(Icons.login),
-            label: Text(_isLoading ? 'Aguarde...' : 'Entrar'),
+            icon: Icon(_otpRequested ? Icons.verified_user : Icons.login),
+            label: Text(
+              _isLoading
+                  ? 'Aguarde...'
+                  : (_otpRequested
+                      ? 'Confirmar OTP'
+                      : 'Solicitar início de sessão / cadastro'),
+            ),
           ),
           const SizedBox(height: 12),
           Card(
@@ -519,7 +616,8 @@ class _LoginPageState extends State<LoginPage> {
                     const SizedBox(height: 10),
                     Text(
                       _agentError!,
-                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                      style:
+                          TextStyle(color: Theme.of(context).colorScheme.error),
                     ),
                   ],
                   const SizedBox(height: 10),
@@ -535,7 +633,8 @@ class _LoginPageState extends State<LoginPage> {
                             children: [
                               Text(
                                 'Driver: ${item.driverId}',
-                                style: const TextStyle(fontWeight: FontWeight.w600),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600),
                               ),
                               Text('Plano: ${item.usageLabel}'),
                               Text(

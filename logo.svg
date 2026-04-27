@@ -1,0 +1,30 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+
+  <!-- Rodas -->
+  <circle cx="150" cy="340" r="38" stroke="#000" stroke-width="6" fill="none"></circle>
+  <circle cx="360" cy="340" r="38" stroke="#000" stroke-width="6" fill="none"></circle>
+
+  <!-- Corpo da moto -->
+  <rect x="190" y="290" width="120" height="35" rx="10" fill="#000"></rect>
+  <line x1="150" y1="340" x2="210" y2="300" stroke="#000" stroke-width="6"></line>
+  <line x1="360" y1="340" x2="310" y2="300" stroke="#000" stroke-width="6"></line>
+
+  <!-- Baú traseiro -->
+  <rect x="310" y="250" width="50" height="40" rx="6" fill="#000"></rect>
+
+  <!-- Mototaxista (com capacete) -->
+  <circle cx="240" cy="240" r="20" fill="#000"></circle>
+  <rect x="225" y="225" width="30" height="10" fill="#000"></rect> <!-- viseira -->
+  <line x1="240" y1="260" x2="265" y2="300" stroke="#000" stroke-width="6"></line>
+  <line x1="240" y1="260" x2="210" y2="290" stroke="#000" stroke-width="6"></line>
+
+  <!-- Detalhe GPS (minimalista) -->
+  <circle cx="400" cy="120" r="10" fill="#000"></circle>
+  <line x1="400" y1="130" x2="400" y2="155" stroke="#000" stroke-width="4"></line>
+
+  <!-- Nome -->
+  <text x="256" y="450" text-anchor="middle" font-size="34" font-family="Arial" font-weight="bold">
+    TRANSPORTADOR
+  </text>
+
+</svg>

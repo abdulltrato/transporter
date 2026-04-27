@@ -144,11 +144,19 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
     }
 
     try {
-      final devCode = await _authService.requestOtp(sanitizedPhone);
-      final verificationCode = sanitizedCode.isEmpty ? devCode : sanitizedCode;
+      if (sanitizedCode.isEmpty) {
+        final devCode = await _authService.requestOtp(sanitizedPhone);
+        final codeHint =
+            devCode.isNotEmpty ? ' Código de desenvolvimento: $devCode' : '';
+        _showMessage(
+          'Pedido de login/cadastro enviado. Introduza o OTP para concluir.$codeHint',
+        );
+        return;
+      }
+
       final accessToken = await _authService.verifyOtp(
         phone: sanitizedPhone,
-        code: verificationCode,
+        code: sanitizedCode,
         role: role,
         fullName: sanitizedName,
         documentId: documentId,
@@ -163,12 +171,7 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
       }
 
       await _activateSession(accessToken: accessToken, role: role);
-
-      final otpHint = sanitizedCode.isEmpty
-          ? 'OTP de desenvolvimento usado automaticamente.'
-          : 'OTP introduzido manualmente.';
-
-      _showMessage('Sessão iniciada como $role. $otpHint');
+      _showMessage('Sessão iniciada como $role.');
     } catch (error) {
       _showMessage('Falha no login: $error');
     }
