@@ -1,9 +1,22 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+val facebookCredentials = Properties().apply {
+    val credentialsFile = rootProject.file("../../facebook_credentials")
+    if (credentialsFile.exists()) {
+        credentialsFile.inputStream().use { load(it) }
+    }
+}
+
+val facebookAppId = (facebookCredentials.getProperty("FACEBOOK_APP_ID") ?: "").trim()
+val facebookClientToken =
+    (facebookCredentials.getProperty("FACEBOOK_CLIENT_TOKEN") ?: "").trim()
 
 android {
     namespace = "com.transporter.mobile"
@@ -27,6 +40,9 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        resValue("string", "facebook_app_id", facebookAppId)
+        resValue("string", "facebook_client_token", facebookClientToken)
+        resValue("string", "fb_login_protocol_scheme", "fb$facebookAppId")
     }
 
     buildTypes {

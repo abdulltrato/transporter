@@ -3,6 +3,7 @@ backend/node_modules/
 backend/dist/
 backend/.env
 npm-debug.log*
+facebook_credentials
 
 # Local Flutter SDK (installed in-repo)
 flutter/

@@ -14,6 +14,9 @@ class SocialAuthProfile {
 }
 
 class SocialAuthService {
+  static const _googleServerClientId =
+      '579062415072-ormq514hcc6jn1fvnhjl3oes9n3hkqcb.apps.googleusercontent.com';
+
   bool _googleInitialized = false;
 
   Future<SocialAuthProfile?> signInWithGoogle() async {
@@ -45,7 +48,8 @@ class SocialAuthService {
     }
 
     if (result.status != LoginStatus.success) {
-      throw Exception(result.message ?? 'Não foi possível autenticar no Facebook.');
+      throw Exception(
+          result.message ?? 'Não foi possível autenticar no Facebook.');
     }
 
     final userData = await FacebookAuth.instance.getUserData(
@@ -69,7 +73,9 @@ class SocialAuthService {
       return;
     }
 
-    await GoogleSignIn.instance.initialize();
+    await GoogleSignIn.instance.initialize(
+      serverClientId: _googleServerClientId,
+    );
     _googleInitialized = true;
   }
 }
