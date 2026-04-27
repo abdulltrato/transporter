@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { DriverStatus } from '../../common/enums/driver-status.enum';
 import { UserRole } from '../../common/enums/user-role.enum';
+import { isAuthorizationBypassEnabled } from '../../common/utils/auth-bypass.util';
 import { RealtimeEventsService } from '../../realtime/events/realtime-events.service';
 import { SubscriptionsService } from '../../subscriptions/services/subscriptions.service';
 import { UsersService } from '../../users/services/users.service';
@@ -130,6 +131,10 @@ export class DriversService implements OnModuleInit {
   }
 
   private async assertDriverRole(userId: string): Promise<void> {
+    if (isAuthorizationBypassEnabled()) {
+      return;
+    }
+
     const user = await this.usersService.findByIdOrThrow(userId);
 
     if (user.role !== UserRole.DRIVER) {

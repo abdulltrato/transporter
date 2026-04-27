@@ -3,12 +3,14 @@ import { UserRole } from '../enums/user-role.enum';
 const DISABLED_VALUES = new Set(['0', 'false', 'no', 'off']);
 
 export function isAuthBypassEnabled(): boolean {
-  const rawValue = process.env.TRANSPORTER_AUTH_BYPASS;
-  if (!rawValue || rawValue.trim().length === 0) {
-    return true;
-  }
+  return isToggleEnabled(process.env.TRANSPORTER_AUTH_BYPASS, true);
+}
 
-  return !DISABLED_VALUES.has(rawValue.trim().toLowerCase());
+export function isAuthorizationBypassEnabled(): boolean {
+  return isToggleEnabled(
+    process.env.TRANSPORTER_AUTHZ_BYPASS,
+    isAuthBypassEnabled()
+  );
 }
 
 export function resolveBypassRole(input: {
@@ -60,4 +62,12 @@ function parseUserRole(rawValue?: string): UserRole | undefined {
   }
 
   return undefined;
+}
+
+function isToggleEnabled(rawValue: string | undefined, defaultValue: boolean): boolean {
+  if (!rawValue || rawValue.trim().length === 0) {
+    return defaultValue;
+  }
+
+  return !DISABLED_VALUES.has(rawValue.trim().toLowerCase());
 }

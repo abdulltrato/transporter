@@ -51,10 +51,11 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
   static const _defaultOrigin = GeoPoint(lat: -25.9653, lng: 32.5892);
   static const _defaultRadiusKm = 5.0;
   static const _guestRole = 'client';
-  static const _isAuthBypassEnabled = bool.fromEnvironment(
+  static const _authBypassRaw = String.fromEnvironment(
     'TRANSPORTER_AUTH_BYPASS',
-    defaultValue: true,
+    defaultValue: 'true',
   );
+  static final _isAuthBypassEnabled = !_isBypassDisabled(_authBypassRaw);
 
   int _selectedIndex = 1;
   String? _accessToken;
@@ -351,6 +352,7 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
         onSocialAuth: _handleSocialAuth,
         onLoadPendingSubscriptionsForAgent: _loadPendingSubscriptionsForAgent,
         onValidateSubscriptionForAgent: _validateSubscriptionForAgent,
+        isAuthBypassEnabled: _isAuthBypassEnabled,
         isAuthenticated: (_accessToken ?? '').trim().isNotEmpty,
         currentRole: _currentRole,
         onLogout: _logout,
@@ -380,6 +382,7 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
         locationWarning: _locationWarning,
         token: token,
         role: role,
+        isAuthBypassEnabled: _isAuthBypassEnabled,
       ),
     ];
 
@@ -591,6 +594,14 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
   String _normalizeRole(String role) {
     final normalized = role.trim().toLowerCase();
     return normalized == 'driver' ? 'driver' : 'client';
+  }
+
+  static bool _isBypassDisabled(String value) {
+    final normalized = value.trim().toLowerCase();
+    return normalized == '0' ||
+        normalized == 'false' ||
+        normalized == 'no' ||
+        normalized == 'off';
   }
 }
 

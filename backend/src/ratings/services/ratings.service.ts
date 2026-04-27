@@ -7,6 +7,7 @@ import {
 import { UserRole } from '../../common/enums/user-role.enum';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
 import { RideStatus } from '../../common/enums/ride-status.enum';
+import { isAuthorizationBypassEnabled } from '../../common/utils/auth-bypass.util';
 import { RidesRepository } from '../../rides/repositories/rides.repository';
 import { SubmitDriverRatingDto } from '../dto/submit-driver-rating.dto';
 import { DriverRatingEntity } from '../entities/driver-rating.entity';
@@ -23,7 +24,9 @@ export class RatingsService {
     currentUser: RequestUser,
     input: SubmitDriverRatingDto
   ): Promise<DriverRatingEntity> {
-    if (currentUser.role !== UserRole.CLIENT) {
+    const authzBypassEnabled = isAuthorizationBypassEnabled();
+
+    if (!authzBypassEnabled && currentUser.role !== UserRole.CLIENT) {
       throw new ForbiddenException('Only clients can rate drivers.');
     }
 
@@ -32,7 +35,7 @@ export class RatingsService {
       throw new NotFoundException('Ride not found.');
     }
 
-    if (ride.clientId !== currentUser.id) {
+    if (!authzBypassEnabled && ride.clientId !== currentUser.id) {
       throw new ForbiddenException('You can only rate rides requested by you.');
     }
 
@@ -53,7 +56,7 @@ export class RatingsService {
   }
 
   async listMyGivenRatings(currentUser: RequestUser): Promise<DriverRatingEntity[]> {
-    if (currentUser.role !== UserRole.CLIENT) {
+    if (!isAuthorizationBypassEnabled() && currentUser.role !== UserRole.CLIENT) {
       throw new ForbiddenException('Only clients can list given ratings.');
     }
 

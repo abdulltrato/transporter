@@ -9,6 +9,7 @@ class LoginPage extends StatefulWidget {
     required this.onSocialAuth,
     required this.onLoadPendingSubscriptionsForAgent,
     required this.onValidateSubscriptionForAgent,
+    required this.isAuthBypassEnabled,
     required this.isAuthenticated,
     required this.currentRole,
     required this.onLogout,
@@ -46,6 +47,7 @@ class LoginPage extends StatefulWidget {
     required String agentName,
     String? notes,
   }) onValidateSubscriptionForAgent;
+  final bool isAuthBypassEnabled;
   final bool isAuthenticated;
   final String? currentRole;
   final Future<void> Function() onLogout;
@@ -149,7 +151,7 @@ class _LoginPageState extends State<LoginPage> {
         neighborhood: _neighborhoodController.text.trim(),
         operatingRegion: _operatingRegionController.text.trim(),
       );
-      if (mounted && isRequestStep) {
+      if (mounted && isRequestStep && !widget.isAuthBypassEnabled) {
         setState(() {
           _otpRequested = true;
         });
@@ -174,7 +176,7 @@ class _LoginPageState extends State<LoginPage> {
         neighborhood: _neighborhoodController.text.trim(),
         operatingRegion: _operatingRegionController.text.trim(),
       );
-      if (mounted) {
+      if (mounted && !widget.isAuthBypassEnabled) {
         setState(() {
           _otpRequested = true;
         });
@@ -357,6 +359,13 @@ class _LoginPageState extends State<LoginPage> {
                   const Text(
                     'Preencha os dados abaixo para entrar como cliente ou taxista.',
                   ),
+                  if (widget.isAuthBypassEnabled) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'Modo local sem autenticação/autorização ativo.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
                   const SizedBox(height: 6),
                   Text(
                     'Estado atual: ${widget.nativeModeSummary}',

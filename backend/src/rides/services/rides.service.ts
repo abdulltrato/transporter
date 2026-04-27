@@ -7,6 +7,7 @@ import {
 import { RideStatus } from '../../common/enums/ride-status.enum';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
+import { isAuthorizationBypassEnabled } from '../../common/utils/auth-bypass.util';
 import { RealtimeEventsService } from '../../realtime/events/realtime-events.service';
 import { RidesRepository } from '../repositories/rides.repository';
 import { RideEntity } from '../entities/ride.entity';
@@ -26,7 +27,7 @@ export class RidesService {
     pickup: RideEntity['pickup'],
     dropoff?: RideEntity['dropoff']
   ): Promise<RideEntity> {
-    if (currentUser.role !== UserRole.CLIENT) {
+    if (!isAuthorizationBypassEnabled() && currentUser.role !== UserRole.CLIENT) {
       throw new ForbiddenException('Only clients can request rides.');
     }
 
@@ -63,13 +64,15 @@ export class RidesService {
     rideId: string,
     action: RideResponseAction
   ): Promise<RideEntity> {
-    if (currentUser.role !== UserRole.DRIVER) {
+    const authzBypassEnabled = isAuthorizationBypassEnabled();
+
+    if (!authzBypassEnabled && currentUser.role !== UserRole.DRIVER) {
       throw new ForbiddenException('Only drivers can answer rides.');
     }
 
     const ride = await this.findByIdOrThrow(rideId);
 
-    if (ride.driverId !== currentUser.id) {
+    if (!authzBypassEnabled && ride.driverId !== currentUser.id) {
       throw new ForbiddenException('This ride is not assigned to this driver.');
     }
 
@@ -121,7 +124,10 @@ export class RidesService {
   async cancelRide(currentUser: RequestUser, rideId: string): Promise<RideEntity> {
     const ride = await this.findByIdOrThrow(rideId);
 
-    if (currentUser.role !== UserRole.CLIENT || ride.clientId !== currentUser.id) {
+    if (
+      !isAuthorizationBypassEnabled() &&
+      (currentUser.role !== UserRole.CLIENT || ride.clientId !== currentUser.id)
+    ) {
       throw new ForbiddenException('Only the client who requested the ride can cancel it.');
     }
 
@@ -139,13 +145,15 @@ export class RidesService {
   }
 
   async startRide(currentUser: RequestUser, rideId: string): Promise<RideEntity> {
-    if (currentUser.role !== UserRole.DRIVER) {
+    const authzBypassEnabled = isAuthorizationBypassEnabled();
+
+    if (!authzBypassEnabled && currentUser.role !== UserRole.DRIVER) {
       throw new ForbiddenException('Only drivers can start rides.');
     }
 
     const ride = await this.findByIdOrThrow(rideId);
 
-    if (ride.driverId !== currentUser.id) {
+    if (!authzBypassEnabled && ride.driverId !== currentUser.id) {
       throw new ForbiddenException('This ride is not assigned to this driver.');
     }
 
@@ -163,13 +171,15 @@ export class RidesService {
   }
 
   async completeRide(currentUser: RequestUser, rideId: string): Promise<RideEntity> {
-    if (currentUser.role !== UserRole.DRIVER) {
+    const authzBypassEnabled = isAuthorizationBypassEnabled();
+
+    if (!authzBypassEnabled && currentUser.role !== UserRole.DRIVER) {
       throw new ForbiddenException('Only drivers can complete rides.');
     }
 
     const ride = await this.findByIdOrThrow(rideId);
 
-    if (ride.driverId !== currentUser.id) {
+    if (!authzBypassEnabled && ride.driverId !== currentUser.id) {
       throw new ForbiddenException('This ride is not assigned to this driver.');
     }
 

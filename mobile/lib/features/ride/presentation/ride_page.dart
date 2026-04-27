@@ -30,6 +30,7 @@ class RidePage extends StatefulWidget {
     this.locationWarning,
     required this.token,
     required this.role,
+    required this.isAuthBypassEnabled,
   });
 
   final RidesService ridesService;
@@ -46,6 +47,7 @@ class RidePage extends StatefulWidget {
   final String? locationWarning;
   final String? token;
   final String? role;
+  final bool isAuthBypassEnabled;
 
   @override
   State<RidePage> createState() => _RidePageState();
@@ -79,12 +81,18 @@ class _RidePageState extends State<RidePage> {
   late final StreamSubscription<String> _realtimeErrorsSubscription;
 
   bool get _isAuthenticated => (widget.token ?? '').trim().isNotEmpty;
-  bool get _isClient => (widget.role ?? '').toLowerCase() == 'client';
-  bool get _isDriver => (widget.role ?? '').toLowerCase() == 'driver';
+  bool get _isClient =>
+      widget.isAuthBypassEnabled || (widget.role ?? '').toLowerCase() == 'client';
+  bool get _isDriver =>
+      widget.isAuthBypassEnabled || (widget.role ?? '').toLowerCase() == 'driver';
   bool get _isDriverOnline =>
       (_driverProfile?.status.toLowerCase() ?? 'offline') == 'online';
 
   String? get _driverOperationalBlockReason {
+    if (widget.isAuthBypassEnabled) {
+      return null;
+    }
+
     if (!_isDriver) {
       return null;
     }

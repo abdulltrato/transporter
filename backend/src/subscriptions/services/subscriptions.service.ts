@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
+import { isAuthorizationBypassEnabled } from '../../common/utils/auth-bypass.util';
 import {
   AgentValidateSubscriptionDto,
   AgentValidationAction
@@ -28,7 +29,7 @@ export class SubscriptionsService {
     currentUser: RequestUser,
     input: RequestSubscriptionPaymentDto
   ): Promise<DriverSubscriptionEntity> {
-    if (currentUser.role !== UserRole.DRIVER) {
+    if (!isAuthorizationBypassEnabled() && currentUser.role !== UserRole.DRIVER) {
       throw new ForbiddenException('Only drivers can submit subscription payments.');
     }
 
@@ -66,7 +67,7 @@ export class SubscriptionsService {
   async getMyCurrentSubscription(
     currentUser: RequestUser
   ): Promise<DriverSubscriptionEntity | undefined> {
-    if (currentUser.role !== UserRole.DRIVER) {
+    if (!isAuthorizationBypassEnabled() && currentUser.role !== UserRole.DRIVER) {
       throw new ForbiddenException('Only drivers can view subscriptions.');
     }
 
@@ -83,7 +84,7 @@ export class SubscriptionsService {
   }
 
   async listMySubscriptions(currentUser: RequestUser): Promise<DriverSubscriptionEntity[]> {
-    if (currentUser.role !== UserRole.DRIVER) {
+    if (!isAuthorizationBypassEnabled() && currentUser.role !== UserRole.DRIVER) {
       throw new ForbiddenException('Only drivers can list subscriptions.');
     }
 
@@ -92,6 +93,10 @@ export class SubscriptionsService {
   }
 
   async assertDriverCanOperate(driverId: string): Promise<void> {
+    if (isAuthorizationBypassEnabled()) {
+      return;
+    }
+
     await this.subscriptionsRepository.expirePastSubscriptions(driverId);
 
     const active = await this.subscriptionsRepository.findLatestActiveByDriverId(
