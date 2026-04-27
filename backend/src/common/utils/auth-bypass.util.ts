@@ -1,0 +1,63 @@
+import { UserRole } from '../enums/user-role.enum';
+
+const DISABLED_VALUES = new Set(['0', 'false', 'no', 'off']);
+
+export function isAuthBypassEnabled(): boolean {
+  const rawValue = process.env.TRANSPORTER_AUTH_BYPASS;
+  if (!rawValue || rawValue.trim().length === 0) {
+    return true;
+  }
+
+  return !DISABLED_VALUES.has(rawValue.trim().toLowerCase());
+}
+
+export function resolveBypassRole(input: {
+  headerRole?: string;
+  token?: string;
+}): UserRole {
+  const fromHeader = parseUserRole(input.headerRole);
+  if (fromHeader) {
+    return fromHeader;
+  }
+
+  const fromToken = parseUserRole(input.token);
+  if (fromToken) {
+    return fromToken;
+  }
+
+  return UserRole.CLIENT;
+}
+
+export function getBypassUserProfile(role: UserRole): {
+  fullName: string;
+  phone: string;
+} {
+  if (role === UserRole.DRIVER) {
+    return {
+      fullName: 'Taxista Modo Teste',
+      phone: '+258900000002'
+    };
+  }
+
+  return {
+    fullName: 'Cliente Modo Teste',
+    phone: '+258900000001'
+  };
+}
+
+function parseUserRole(rawValue?: string): UserRole | undefined {
+  if (!rawValue) {
+    return undefined;
+  }
+
+  const normalized = rawValue.trim().toLowerCase();
+  if (normalized.includes(UserRole.DRIVER)) {
+    return UserRole.DRIVER;
+  }
+
+  if (normalized.includes(UserRole.CLIENT)) {
+    return UserRole.CLIENT;
+  }
+
+  return undefined;
+}

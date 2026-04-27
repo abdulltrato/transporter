@@ -50,8 +50,13 @@ class _HomeShell extends StatefulWidget {
 class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
   static const _defaultOrigin = GeoPoint(lat: -25.9653, lng: 32.5892);
   static const _defaultRadiusKm = 5.0;
+  static const _guestRole = 'client';
+  static const _isAuthBypassEnabled = bool.fromEnvironment(
+    'TRANSPORTER_AUTH_BYPASS',
+    defaultValue: true,
+  );
 
-  int _selectedIndex = 0;
+  int _selectedIndex = 1;
   String? _accessToken;
   String? _currentRole;
   GeoPoint? _currentLocation;
@@ -100,7 +105,7 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
 
     WidgetsBinding.instance.addObserver(this);
     _nativeRuntimeService.updateForegroundState(true);
-    unawaited(_restoreSession());
+    unawaited(_enterGuestMode());
     unawaited(_startLocationTracking());
   }
 
@@ -119,6 +124,26 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
     _nativeRuntimeService.updateForegroundState(_isForegroundState(state));
   }
 
+  Future<void> _enterGuestMode() async {
+    if (_isAuthBypassEnabled) {
+      await _activateSession(
+        accessToken: _buildBypassToken(_guestRole),
+        role: _guestRole,
+      );
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _accessToken = null;
+      _currentRole = _guestRole;
+      _selectedIndex = 1;
+    });
+  }
+
   Future<void> _handleLogin({
     required String fullName,
     required String phone,
@@ -129,6 +154,16 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
     String? neighborhood,
     String? operatingRegion,
   }) async {
+    final resolvedRole = _normalizeRole(role);
+    if (_isAuthBypassEnabled) {
+      await _activateSession(
+        accessToken: _buildBypassToken(resolvedRole),
+        role: resolvedRole,
+      );
+      _showMessage('Modo de teste ativo: sessão local como $resolvedRole.');
+      return;
+    }
+
     final sanitizedName = fullName.trim();
     final sanitizedPhone = phone.trim();
     final sanitizedCode = code.trim();
@@ -157,7 +192,7 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
       final accessToken = await _authService.verifyOtp(
         phone: sanitizedPhone,
         code: sanitizedCode,
-        role: role,
+        role: resolvedRole,
         fullName: sanitizedName,
         documentId: documentId,
         documentExpiry: documentExpiry,
@@ -170,8 +205,8 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
         return;
       }
 
-      await _activateSession(accessToken: accessToken, role: role);
-      _showMessage('Sessão iniciada como $role.');
+      await _activateSession(accessToken: accessToken, role: resolvedRole);
+      _showMessage('Sessão iniciada como $resolvedRole.');
     } catch (error) {
       _showMessage('Falha no login: $error');
     }
@@ -186,6 +221,16 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
     String? neighborhood,
     String? operatingRegion,
   }) async {
+    final resolvedRole = _normalizeRole(role);
+    if (_isAuthBypassEnabled) {
+      await _activateSession(
+        accessToken: _buildBypassToken(resolvedRole),
+        role: resolvedRole,
+      );
+      _showMessage('Modo de teste ativo: sessão local como $resolvedRole.');
+      return;
+    }
+
     try {
       final profile = switch (provider) {
         'google' => await _socialAuthService.signInWithGoogle(),
@@ -212,7 +257,7 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
       final accessToken = await _authService.socialLogin(
         provider: provider,
         providerUserId: profile.providerUserId,
-        role: role,
+        role: resolvedRole,
         fullName: resolvedName,
         documentId: documentId,
         documentExpiry: documentExpiry,
@@ -225,9 +270,9 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
         return;
       }
 
-      await _activateSession(accessToken: accessToken, role: role);
+      await _activateSession(accessToken: accessToken, role: resolvedRole);
       final providerLabel = provider == 'google' ? 'Google' : 'Facebook';
-      _showMessage('Sessão iniciada com $providerLabel como $role.');
+      _showMessage('Sessão iniciada com $providerLabel como $resolvedRole.');
     } catch (error) {
       _showMessage('Falha no login social: $error');
     }
@@ -262,47 +307,14 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _restoreSession() async {
-    try {
-      final stored = await _sessionStorageService.loadSession();
-      if (stored == null) {
-        return;
-      }
-
-      _apiClient.token = stored.accessToken;
-      _nativeRuntimeService.setSessionToken(stored.accessToken);
-      _realtimeMapService.connect(token: stored.accessToken);
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _accessToken = stored.accessToken;
-        _currentRole = stored.role;
-        _selectedIndex = 1;
-      });
-    } catch (_) {
-      // Keep app usable even if persistence is unavailable.
-    }
-  }
-
   Future<void> _logout() async {
     _realtimeMapService.disconnect();
     _apiClient.token = null;
     _nativeRuntimeService.setSessionToken(null);
     await _sessionStorageService.clearSession();
 
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _accessToken = null;
-      _currentRole = null;
-      _selectedIndex = 0;
-    });
-    _showMessage('Sessão terminada.');
+    await _enterGuestMode();
+    _showMessage('Modo de teste sem autenticação ativo.');
   }
 
   Future<List<DriverSubscription>> _loadPendingSubscriptionsForAgent({
@@ -330,6 +342,8 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final origin = _currentLocation ?? _defaultOrigin;
+    final role = _currentRole ?? _guestRole;
+    final token = _accessToken;
 
     final pages = [
       LoginPage(
@@ -341,7 +355,7 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
         currentRole: _currentRole,
         onLogout: _logout,
         isRobustModeEnabled: _nativeRuntimeService.isRobustMode,
-        nativeModeSummary: _buildNativeModeSummary(),
+        nativeModeSummary: 'Modo de teste sem autenticação · ${_buildNativeModeSummary()}',
         onRobustModeChanged: _setNativeMode,
       ),
       MapPage(
@@ -349,7 +363,7 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
         realtimeMapService: _realtimeMapService,
         origin: origin,
         radiusKm: _defaultRadiusKm,
-        token: _accessToken,
+        token: token,
       ),
       RidePage(
         ridesService: _ridesService,
@@ -364,8 +378,8 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
         onSelectDropoffFromMap: _setDropoffFromMap,
         onClearDropoff: _clearDropoff,
         locationWarning: _locationWarning,
-        token: _accessToken,
-        role: _currentRole,
+        token: token,
+        role: role,
       ),
     ];
 
@@ -568,6 +582,15 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
     }
 
     return 'http://localhost:3000';
+  }
+
+  String _buildBypassToken(String role) {
+    return 'bypass-${_normalizeRole(role)}-token';
+  }
+
+  String _normalizeRole(String role) {
+    final normalized = role.trim().toLowerCase();
+    return normalized == 'driver' ? 'driver' : 'client';
   }
 }
 

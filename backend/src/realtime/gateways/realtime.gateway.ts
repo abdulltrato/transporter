@@ -15,8 +15,14 @@ import { getJwtSecret } from '../../auth/config/jwt.config';
 import { JwtPayload } from '../../auth/interfaces/jwt-payload.interface';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { RequestUser } from '../../common/interfaces/request-user.interface';
+import {
+  getBypassUserProfile,
+  isAuthBypassEnabled,
+  resolveBypassRole
+} from '../../common/utils/auth-bypass.util';
 import { DriversService } from '../../drivers/services/drivers.service';
 import { LocationService } from '../../location/services/location.service';
+import { UsersService } from '../../users/services/users.service';
 import {
   MAP_SUBSCRIBERS_ROOM,
   REALTIME_NAMESPACE,
@@ -50,7 +56,8 @@ export class RealtimeGateway
     private readonly jwtService: JwtService,
     private readonly realtimeEvents: RealtimeEventsService,
     private readonly driversService: DriversService,
-    private readonly locationService: LocationService
+    private readonly locationService: LocationService,
+    private readonly usersService: UsersService
   ) {}
 
   afterInit(server: Server): void {
@@ -58,8 +65,8 @@ export class RealtimeGateway
     this.logger.log('Realtime gateway ready.');
   }
 
-  handleConnection(client: Socket): void {
-    const user = this.authenticateClient(client);
+  async handleConnection(client: Socket): Promise<void> {
+    const user = await this.authenticateClient(client);
     if (!user) {
       return;
     }
@@ -118,7 +125,11 @@ export class RealtimeGateway
     client.leave(MAP_SUBSCRIBERS_ROOM);
   }
 
-  private authenticateClient(client: Socket): RequestUser | undefined {
+  private async authenticateClient(client: Socket): Promise<RequestUser | undefined> {
+    if (isAuthBypassEnabled()) {
+      return this.resolveBypassUser(client);
+    }
+
     const token = this.extractToken(client);
 
     if (!token) {
@@ -146,6 +157,39 @@ export class RealtimeGateway
     }
   }
 
+  private async resolveBypassUser(client: Socket): Promise<RequestUser | undefined> {
+    const roleHeader = this.toFirstString(client.handshake.headers['x-transporter-role']);
+    const role = resolveBypassRole({
+      headerRole: roleHeader,
+      token: this.extractToken(client)
+    });
+    const profile = getBypassUserProfile(role);
+
+    let user = await this.usersService.findByPhone(profile.phone);
+    if (!user) {
+      try {
+        user = await this.usersService.create({
+          fullName: profile.fullName,
+          phone: profile.phone,
+          role
+        });
+      } catch {
+        user = await this.usersService.findByPhone(profile.phone);
+      }
+    }
+
+    if (!user) {
+      this.disconnectUnauthorized(client, 'Bypass user initialization failed.');
+      return undefined;
+    }
+
+    return {
+      id: user.id,
+      phone: user.phone,
+      role: user.role
+    };
+  }
+
   private extractToken(client: Socket): string | undefined {
     const authToken = client.handshake.auth?.token;
     if (typeof authToken === 'string' && authToken.trim().length > 0) {
@@ -170,6 +214,19 @@ export class RealtimeGateway
 
   private isFiniteNumber(value: unknown): value is number {
     return typeof value === 'number' && Number.isFinite(value);
+  }
+
+  private toFirstString(value: unknown): string | undefined {
+    if (Array.isArray(value) && value.length > 0) {
+      const first = value[0];
+      return typeof first === 'string' ? first : undefined;
+    }
+
+    if (typeof value === 'string') {
+      return value;
+    }
+
+    return undefined;
   }
 
   private disconnectUnauthorized(client: Socket, reason: string): void {
