@@ -1,206 +1,357 @@
-# Transporter - Documento Tecnico Aprimorado (MVP)
+# Transporter - Documento Tecnico Consolidado
 
-## 1. Resumo do Produto
+## 1. Visao Geral
 
-O **Transporter** conecta clientes e taxistas de motorizada com base em GPS, com foco em resposta rapida e operacao simples em cenarios de mobilidade urbana informal.
+O Transporter e uma plataforma de mobilidade para ligar clientes e taxistas de motorizada com base em geolocalizacao e operacao em tempo real.
 
-Objetivo do MVP:
-- cadastrar cliente e taxista;
-- autenticar por telefone (OTP);
-- permitir taxista ficar online/offline;
-- atualizar localizacao em tempo real;
-- buscar taxistas proximos;
-- solicitar corrida e fazer matching automatico por distancia.
+Contexto do produto:
+- foco em cenarios de transporte urbano informal;
+- necessidade de resposta rapida com internet instavel;
+- importancia de confiabilidade operacional e seguranca basica desde o MVP.
 
-## 2. Arquitetura Escolhida
+Estado atual:
+- backend funcional em NestJS com API e WebSocket;
+- app Flutter funcional com tres areas principais: acesso, mapa e corrida;
+- suporte a subscricao do taxista e avaliacao de servico.
 
-Repositorio organizado em duas aplicacoes:
+## 2. Propositos de Uma App Como Esta
 
-- `backend/` (NestJS + TypeScript): API principal do negocio.
-- `mobile/` (Flutter): app cliente/taxista com estrutura inicial modular.
+Uma app deste tipo deve ir alem de "pedir motorizada":
+- reduzir tempo de espera e incerteza do cliente;
+- organizar oferta de taxistas por proximidade e disponibilidade real;
+- melhorar renda do taxista por distribuicao mais justa de corridas;
+- registrar historico de operacao para auditoria e melhoria continua;
+- habilitar camada financeira (subscricao, pagamentos, eventualmente repasses);
+- criar base para servicos derivados: entregas, corridas programadas, clientes corporativos.
 
-Principio adotado: **modulos pequenos e focados**, evitando arquivos grandes e acoplados.
+## 3. Arquitetura Atual do Repositorio
 
-## 3. Backend MVP (Implementado)
+```text
+.
+├─ backend/
+│  ├─ src/
+│  │  ├─ auth/
+│  │  ├─ common/
+│  │  ├─ database/
+│  │  ├─ drivers/
+│  │  ├─ location/
+│  │  ├─ ratings/
+│  │  ├─ realtime/
+│  │  ├─ redis/
+│  │  ├─ rides/
+│  │  ├─ subscriptions/
+│  │  ├─ users/
+│  │  ├─ app.module.ts
+│  │  └─ main.ts
+│  ├─ .env.example
+│  ├─ package.json
+│  └─ tsconfig*.json
+├─ mobile/
+│  ├─ android/
+│  ├─ ios/
+│  ├─ lib/
+│  │  ├─ core/
+│  │  ├─ features/
+│  │  │  ├─ auth/presentation/login_page.dart
+│  │  │  ├─ map/presentation/map_page.dart
+│  │  │  └─ ride/presentation/ride_page.dart
+│  │  ├─ models/
+│  │  ├─ services/
+│  │  └─ main.dart
+│  ├─ test/widget_test.dart
+│  ├─ analysis_options.yaml
+│  └─ pubspec.yaml
+├─ docker-compose.yml
+├─ README.md
+└─ transporter.md
+```
 
-### 3.1 Estrutura de Modulos
+## 4. Backend - Modulos e Responsabilidades
 
-`backend/src/`:
-- `auth/`: OTP, validacao e emissao de JWT.
-- `users/`: identidade base (cliente/taxista).
-- `drivers/`: perfil operacional do taxista e status online/offline.
-- `location/`: atualizacao e consulta geografica.
-- `rides/`: solicitacao de corrida, atribuicao e resposta do taxista.
-- `realtime/`: gateway websocket para eventos em tempo real (mapa e corridas).
-- `database/`: conexao PostgreSQL e bootstrap de schema.
-- `redis/`: conexao Redis para presenca online e localizacao.
-- `common/`: enums, guardas, decorators e utilitarios compartilhados.
+Modulos atuais em `backend/src`:
+- `auth`: OTP, token JWT, login social e controle de identidade.
+- `users`: perfil base do utilizador.
+- `drivers`: perfil operacional do taxista e estado online/offline.
+- `location`: escrita e consulta de localizacao.
+- `rides`: ciclo de vida de corrida e reatribuicao.
+- `subscriptions`: planos, pagamento e validacao por agente.
+- `ratings`: avaliacao de taxista e resumo por estrelas.
+- `realtime`: gateway WebSocket e emissao de eventos.
+- `database`: conexao PostgreSQL e bootstrap de schema.
+- `redis`: conexao Redis.
+- `common`: enums, decorators, guardas, interfaces e utilitarios.
 
-### 3.2 Fluxos de Negocio Implementados
+Pontos tecnicos ja aplicados:
+- validacao global com `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`);
+- prefixo global `/api`;
+- guard global de autenticacao com excecao de rotas publicas;
+- matching por distancia com raio progressivo;
+- indice geoespacial Redis com `GEOSEARCH`.
 
-1. **Autenticacao**
-- `POST /api/auth/request-otp`
-- `POST /api/auth/verify-otp`
-- `POST /api/auth/social` (Google/Facebook com vinculo social)
+## 5. Mobile - Estrutura e Comportamento Atual
 
-2. **Taxista**
-- completar perfil (documento, validade, bairro, regiao);
-- manter subscricao ativa via pagamento M-Pesa/eMola;
-- alterar status online/offline;
+Estrutura atual em `mobile/lib`:
+- `core/`: tema e identidade visual.
+- `features/auth/presentation`: login OTP/social, role e comandos de sessao.
+- `features/map/presentation`: estado realtime e lista de taxistas proximos.
+- `features/ride/presentation`: orquestracao da corrida (solicitar, responder, iniciar, concluir, cancelar), subscricao e avaliacao.
+- `models/`: tipos de dominio.
+- `services/`: cliente HTTP, sessao, localizacao, realtime, subscricao e avaliacao.
+
+### Modo Nativo Robusto (ja integrado)
+
+Objetivo:
+- reduzir perda de sincronizacao em rede instavel e durante transicoes de lifecycle.
+
+Implementacao atual:
+- `NativeRuntimeService` com fila coalescida de localizacao;
+- retentativas com backoff exponencial;
+- pausa em background e retoma em foreground;
+- snapshot de estado exposto para UI;
+- `RealtimeMapService` com reconexao progressiva e tratamento de `auth:error`.
+
+## 6. Fluxos Funcionais Implementados
+
+1. Onboarding e autenticacao.
+- OTP por telefone (`request-otp`, `verify-otp`).
+- login social (`social`) com vinculacao de identidade.
+
+2. Operacao do taxista.
+- completar perfil.
+- manter estado online/offline.
 - atualizar localizacao.
+- manter subscricao ativa.
 
-3. **Cliente**
-- atualizar localizacao;
-- consultar taxistas proximos;
+3. Operacao do cliente.
+- atualizar localizacao.
+- ver taxistas proximos.
 - solicitar corrida.
 
-4. **Matching de corrida**
-- busca progressiva por raio: `2km -> 5km -> 8km -> 12km`;
-- prioridade pelo taxista mais proximo;
-- reatribuicao automatica se taxista rejeitar.
+4. Ciclo de corrida.
+- criacao de pedido.
+- atribuicao inicial por proximidade.
+- aceite/rejeicao do taxista.
+- reatribuicao automatica apos rejeicao.
+- inicio, conclusao e cancelamento.
 
-5. **Subscricao do taxista (implementado)**
-- planos disponiveis: `mensal (30 dias)`, `trimestral (90 dias)`, `semestral (180 dias)`, `anual (365 dias)`;
-- pagamento via `M-Pesa` ou `eMola`;
-- cada pagamento entra em estado `pending_validation`;
-- validacao manual por agentes liberada apos 30 minutos;
-- aprovacao ativa a subscricao e expiracao calculada conforme o plano.
+5. Qualidade do servico.
+- avaliacao 1..5 apos corrida concluida.
+- consulta de resumo por taxista.
 
-6. **Tempo real (WebSocket)**
-- autenticacao JWT no handshake;
-- canal de mapa com eventos de status/localizacao de taxistas online;
-- canal de corrida com eventos de atualizacao para cliente e taxista envolvidos.
+## 7. Endpoints Disponiveis
 
-7. **Avaliacao de taxistas (implementado)**
-- cliente avalia de `1` a `5` estrelas apos corrida concluida;
-- escala de satisfacao: `1 insatisfeito`, `2 pouco satisfeito`, `3 satisfeito`, `4 muito satisfeito`, `5 super satisfeito`;
-- media e distribuicao por estrelas disponiveis por taxista.
-
-### 3.3 Endpoints MVP
-
+Autenticacao:
 - `POST /api/auth/request-otp`
 - `POST /api/auth/verify-otp`
 - `POST /api/auth/social`
+
+Utilizador:
 - `GET /api/users/me`
 - `PATCH /api/users/me`
+
+Taxista:
 - `GET /api/drivers/me/profile`
 - `PATCH /api/drivers/me/profile`
 - `PATCH /api/drivers/me/status`
+
+Localizacao:
 - `PUT /api/location/me`
 - `GET /api/location/me`
 - `GET /api/location/drivers/nearby`
+
+Corrida:
 - `POST /api/rides/request`
 - `PATCH /api/rides/:rideId/respond`
 - `PATCH /api/rides/:rideId/cancel`
 - `PATCH /api/rides/:rideId/start`
 - `PATCH /api/rides/:rideId/complete`
 - `GET /api/rides/me`
+
+Subscricao:
 - `POST /api/subscriptions/me/payment`
 - `GET /api/subscriptions/me/current`
 - `GET /api/subscriptions/me/history`
 - `GET /api/subscriptions/agent/pending` (header `x-agent-key`)
 - `PATCH /api/subscriptions/agent/:subscriptionId/validate` (header `x-agent-key`)
+
+Avaliacao:
 - `POST /api/ratings/driver`
 - `GET /api/ratings/me/given`
 - `GET /api/ratings/drivers/:driverId/summary`
-- `WS /realtime`:
-  - receber: `auth:error`, `map:snapshot`, `driver:status`, `driver:location`, `ride:updated`
-  - enviar: `map:subscribe`, `map:unsubscribe`
 
-## 4. Modelo de Dados (MVP)
+Realtime:
+- namespace: `WS /realtime`
+- eventos servidor: `auth:error`, `map:snapshot`, `driver:status`, `driver:location`, `ride:updated`
+- eventos cliente: `map:subscribe`, `map:unsubscribe`
 
-### 4.1 User
-- `id`
-- `fullName`
-- `phone`
-- `role` (`client` | `driver`)
+## 8. Modelo de Dados Atual
 
-### 4.2 DriverProfile
-- `userId`
-- `documentId`
-- `documentExpiry`
-- `neighborhood`
-- `operatingRegion`
-- `status` (`online` | `offline`)
+Tabelas principais em PostgreSQL:
+- `users`
+- `driver_profiles`
+- `user_social_identities`
+- `driver_subscriptions`
+- `rides`
+- `driver_ratings`
 
-### 4.3 Location
-- `userId`
-- `coordinates` (`lat`, `lng`)
-- `updatedAt`
+Dados temporais e geoespaciais em Redis:
+- OTP por telefone (`transporter:auth:otp:*`);
+- localizacao por utilizador e indice geo (`transporter:location:*`, `transporter:location:geo`);
+- presenca online de taxistas.
 
-### 4.4 Ride
-- `id`
-- `clientId`
-- `driverId` (opcional)
-- `pickup`
-- `dropoff` (opcional)
-- `status` (`searching`, `assigned`, `accepted`, `in_progress`, `cancelled`, `completed`, etc.)
-- `searchRadiusKm`
-- `rejectedDriverIds`
+## 9. Execucao e Ambiente
 
-## 5. Estrutura Mobile (Implementada)
+### 9.1 Backend
 
-`mobile/lib/`:
-- `core/`: tema e cores.
-- `features/auth/presentation/`: tela de login OTP.
-- `features/map/presentation/`: tela de taxistas proximos.
-- `features/ride/presentation/`: inicio do fluxo de corrida.
-- `models/`: modelos de dominio (`Driver`, `Ride`, `GeoPoint`).
-- `services/`: cliente HTTP, autenticacao OTP, localizacao e websocket realtime.
+1. Entrar em `backend`.
+2. Copiar `.env.example` para `.env`.
+3. Ajustar variaveis de ambiente.
+4. `npm install`.
+5. `npm run typecheck`.
+6. `npm run build`.
+7. `npm run start:dev`.
 
-## 6. Regras Tecnicas e de Manutencao
+### 9.2 Mobile
 
-- Cada modulo possui responsabilidade unica.
-- Regras de validacao separadas em servicos dedicados.
-- Logica de matching separada da logica de persistencia de corrida.
-- Sem arquivos monoliticos: preferencia por submodulos menores.
-- DTOs com `class-validator` para blindar entrada da API.
-- Repositorios de `users`, `drivers` e `rides` persistem em PostgreSQL.
-- Presenca online de taxistas e localizacao em tempo real persistidas em Redis.
-- Busca de taxistas proximos otimizada com indice geoespacial Redis (`GEOSEARCH`).
+1. Entrar em `mobile`.
+2. `flutter pub get`.
+3. `flutter analyze`.
+4. `flutter test`.
+5. `flutter run`.
 
-## 7. Seguranca MVP
+### 9.3 Docker local
 
-Ja aplicado:
-- JWT para rotas autenticadas;
-- guard global com suporte a rotas publicas;
-- OTP com expiração e limite de tentativas;
-- rate limit de OTP por telefone (cooldown entre requisicoes e limite por janela).
-- chave de agente (`AGENT_VALIDATION_KEY`) para validar subscricoes manualmente.
+`docker-compose.yml` sobe:
+- PostgreSQL (`5433:5432`);
+- Redis (`6379:6379`).
 
-Para proxima iteracao:
-- integracao real com provedor SMS;
-- rate limiting por IP;
-- persistencia de sessoes em Redis;
-- verificacao criptografica de pagamentos M-Pesa/eMola com reconciliacao automatica;
-- auditoria e rastreio anti-fraude de localizacao.
+Atencao:
+- `backend/.env.example` usa `5432` por defeito em `DATABASE_URL`;
+- com Docker local desta stack, usar `5433`.
 
-## 8. Como Executar
+## 10. Fragilidades e Desafios com Solucoes
 
-### Backend
+### 10.1 Rede instavel e sincronizacao irregular
 
-1. `cd backend`
-2. copiar `.env.example` para `.env`
-3. garantir PostgreSQL ativo e acessivel pelas variaveis do `.env`
-4. garantir Redis ativo e acessivel pelas variaveis do `.env`
-5. `npm install`
-6. `npm run start:dev`
+Fragilidade:
+- perda de eventos e atraso na atualizacao de estado quando o dispositivo troca entre foreground/background.
 
-API disponivel em: `http://localhost:3000/api`
+Solucoes recomendadas:
+- confirmar rececao de eventos criticos via ACK;
+- persistir fila local de comandos essenciais;
+- tornar operacoes idempotentes por chave de correlacao.
 
-### Mobile
+### 10.2 Fraude de localizacao
 
-1. `cd mobile`
-2. `flutter pub get`
-3. `flutter run`
+Fragilidade:
+- spoofing de GPS pode manipular matching e faturacao.
 
-## 9. Proximos Passos Recomendados
+Solucoes recomendadas:
+- validacao de velocidade/aceleracao e trajetoria plausivel;
+- deteccao de saltos geograficos impossiveis;
+- sinalizacao de risco para revisao manual.
 
-1. Implementar notificacoes push para novos pedidos de corrida.
-2. Criar testes E2E (auth, online/offline, ride matching, reatribuicao, subscricao e avaliacao).
-3. Integrar reconciliacao automatica dos pagamentos M-Pesa/eMola.
-4. Persistir historico analitico de busca/matching para observabilidade operacional.
+### 10.3 Escalabilidade realtime
 
-## 10. Status Atual
+Fragilidade:
+- aumento de conexoes pode sobrecarregar gateway unico.
 
-O projeto ja possui uma base funcional para evolucao do MVP, com foco em simplicidade, clareza arquitetural e manutencao facilitada.
+Solucoes recomendadas:
+- escalar horizontalmente WebSocket;
+- usar Redis Pub/Sub para difusao entre instancias;
+- segmentar por regiao/bairro para reduzir fan-out.
+
+### 10.4 Pagamentos e validacao manual
+
+Fragilidade:
+- atraso operacional e risco humano no processo de aprovacao.
+
+Solucoes recomendadas:
+- webhooks e reconciliacao automatica;
+- estados transacionais claros;
+- trilha de auditoria completa por pagamento.
+
+### 10.5 Seguranca de autenticacao e API
+
+Fragilidade:
+- configuracoes de desenvolvimento podem vazar para producao (`OTP_DEV_MODE`, CORS aberto).
+
+Solucoes recomendadas:
+- perfis de ambiente obrigatorios (dev/stage/prod);
+- politica de CORS por lista de origens;
+- rotacao de segredos com validade curta;
+- rate limit por IP e por conta.
+
+### 10.6 Qualidade e regressao
+
+Fragilidade:
+- cobertura de testes ainda baixa no backend e superficial no mobile.
+
+Solucoes recomendadas:
+- suite unit para regras de negocio;
+- integracao para repositorios/servicos;
+- E2E para fluxos criticos: auth, matching, corrida, subscricao e avaliacao;
+- pipeline CI obrigando checks antes de merge.
+
+## 11. O Que Deve Ser Incluido na Proxima Fase
+
+Itens de produto:
+- notificacoes push para novos pedidos e alteracoes de estado;
+- ETA mais preciso com motor de rotas e transito;
+- area de suporte e incidente para cliente e taxista;
+- painel operacional para validacao e monitorizacao.
+
+Itens tecnicos:
+- migracoes versionadas de base de dados;
+- padrao de logs estruturados com correlacao por request;
+- metricas de negocio e SLI/SLO (tempo de atribuicao, taxa de rejeicao, cancelamentos);
+- estrategia de cache e retencao de dados.
+
+Itens de seguranca e conformidade:
+- criptografia de dados sensiveis em repouso;
+- politica de retencao e anonimacao de dados;
+- auditoria de acesso administrativo;
+- verificacao reforcada de identidade do taxista.
+
+## 12. Melhorias Estruturais no Codigo Atual
+
+Backend:
+- separar bootstrap de schema para migracoes dedicadas;
+- adicionar script `test` e suites automatizadas;
+- modularizar regras longas em `subscriptions` e `rides`.
+
+Mobile:
+- dividir `ride_page.dart` e `main.dart` em componentes menores;
+- introduzir estado previsivel por feature (controller/store);
+- aumentar cobertura de testes widget/integration.
+
+Repositorio:
+- adicionar `.github/workflows` com build/test/analyze;
+- padronizar formatacao e convencoes de commit.
+
+## 13. Roadmap Recomendado
+
+Curto prazo (1-2 sprints):
+- CI + testes minimos;
+- correcoes de ambiente e seguranca;
+- push notifications basicas.
+
+Medio prazo (3-5 sprints):
+- reconciliacao automatica de pagamentos;
+- observabilidade ponta a ponta;
+- melhoria de UX em corridas e tratamento de falhas.
+
+Longo prazo:
+- multi-cidade com particionamento logico;
+- analytics operacional e previsao de demanda;
+- abertura de APIs para parceiros.
+
+## 14. Conclusao
+
+O projeto ja possui uma base funcional concreta e alinhada ao MVP real de mobilidade.
+
+Para ganhar robustez de producao, a prioridade deve ser:
+- testes automatizados e CI;
+- seguranca por ambiente;
+- observabilidade;
+- automacao de operacoes criticas (pagamento, reconciliacao e suporte).
