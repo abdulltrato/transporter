@@ -7,6 +7,8 @@ import 'features/auth/presentation/login_page.dart';
 import 'features/map/presentation/map_page.dart';
 import 'features/ride/presentation/ride_page.dart';
 import 'models/geo_point.dart';
+import 'models/driver_subscription.dart';
+import 'services/agent_subscriptions_service.dart';
 import 'services/api_client.dart';
 import 'services/auth_service.dart';
 import 'services/device_location_service.dart';
@@ -16,6 +18,7 @@ import 'services/native_runtime_service.dart';
 import 'services/ratings_service.dart';
 import 'services/realtime_map_service.dart';
 import 'services/rides_service.dart';
+import 'services/session_storage_service.dart';
 import 'services/social_auth_service.dart';
 import 'services/subscription_service.dart';
 
@@ -60,6 +63,8 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
 
   late final ApiClient _apiClient;
   late final AuthService _authService;
+  late final AgentSubscriptionsService _agentSubscriptionsService;
+  late final SessionStorageService _sessionStorageService;
   late final SocialAuthService _socialAuthService;
   late final DriversService _driversService;
   late final SubscriptionService _subscriptionService;
@@ -76,6 +81,8 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
 
     _apiClient = ApiClient(baseUrl: _resolveApiBaseUrl());
     _authService = AuthService(_apiClient);
+    _agentSubscriptionsService = AgentSubscriptionsService(_apiClient);
+    _sessionStorageService = SessionStorageService();
     _socialAuthService = SocialAuthService();
     _driversService = DriversService(_apiClient);
     _subscriptionService = SubscriptionService(_apiClient);
@@ -93,6 +100,7 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
 
     WidgetsBinding.instance.addObserver(this);
     _nativeRuntimeService.updateForegroundState(true);
+    unawaited(_restoreSession());
     unawaited(_startLocationTracking());
   }
 
@@ -154,7 +162,7 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
         return;
       }
 
-      _activateSession(accessToken: accessToken, role: role);
+      await _activateSession(accessToken: accessToken, role: role);
 
       final otpHint = sanitizedCode.isEmpty
           ? 'OTP de desenvolvimento usado automaticamente.'
@@ -214,7 +222,7 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
         return;
       }
 
-      _activateSession(accessToken: accessToken, role: role);
+      await _activateSession(accessToken: accessToken, role: role);
       final providerLabel = provider == 'google' ? 'Google' : 'Facebook';
       _showMessage('Sessão iniciada com $providerLabel como $role.');
     } catch (error) {
@@ -222,10 +230,10 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
     }
   }
 
-  void _activateSession({
+  Future<void> _activateSession({
     required String accessToken,
     required String role,
-  }) {
+  }) async {
     _apiClient.token = accessToken;
     _nativeRuntimeService.setSessionToken(accessToken);
     _realtimeMapService.connect(token: accessToken);
@@ -244,6 +252,76 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
     if (currentLocation != null) {
       _scheduleLocationSync(currentLocation);
     }
+
+    await _sessionStorageService.saveSession(
+      accessToken: accessToken,
+      role: role,
+    );
+  }
+
+  Future<void> _restoreSession() async {
+    try {
+      final stored = await _sessionStorageService.loadSession();
+      if (stored == null) {
+        return;
+      }
+
+      _apiClient.token = stored.accessToken;
+      _nativeRuntimeService.setSessionToken(stored.accessToken);
+      _realtimeMapService.connect(token: stored.accessToken);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _accessToken = stored.accessToken;
+        _currentRole = stored.role;
+        _selectedIndex = 1;
+      });
+    } catch (_) {
+      // Keep app usable even if persistence is unavailable.
+    }
+  }
+
+  Future<void> _logout() async {
+    _realtimeMapService.disconnect();
+    _apiClient.token = null;
+    _nativeRuntimeService.setSessionToken(null);
+    await _sessionStorageService.clearSession();
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _accessToken = null;
+      _currentRole = null;
+      _selectedIndex = 0;
+    });
+    _showMessage('Sessão terminada.');
+  }
+
+  Future<List<DriverSubscription>> _loadPendingSubscriptionsForAgent({
+    required String agentKey,
+  }) {
+    return _agentSubscriptionsService.listPending(agentKey: agentKey);
+  }
+
+  Future<DriverSubscription> _validateSubscriptionForAgent({
+    required String agentKey,
+    required String subscriptionId,
+    required String action,
+    required String agentName,
+    String? notes,
+  }) {
+    return _agentSubscriptionsService.validate(
+      agentKey: agentKey,
+      subscriptionId: subscriptionId,
+      action: action,
+      agentName: agentName,
+      notes: notes,
+    );
   }
 
   @override
@@ -254,6 +332,11 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
       LoginPage(
         onSubmit: _handleLogin,
         onSocialAuth: _handleSocialAuth,
+        onLoadPendingSubscriptionsForAgent: _loadPendingSubscriptionsForAgent,
+        onValidateSubscriptionForAgent: _validateSubscriptionForAgent,
+        isAuthenticated: (_accessToken ?? '').trim().isNotEmpty,
+        currentRole: _currentRole,
+        onLogout: _logout,
         isRobustModeEnabled: _nativeRuntimeService.isRobustMode,
         nativeModeSummary: _buildNativeModeSummary(),
         onRobustModeChanged: _setNativeMode,

@@ -17,33 +17,45 @@ class ApiClient {
   final Duration requestTimeout;
   String? token;
 
-  Future<dynamic> get(String path, {Map<String, dynamic>? query}) async {
+  Future<dynamic> get(
+    String path, {
+    Map<String, dynamic>? query,
+    Map<String, String>? headers,
+  }) async {
     final uri = Uri.parse('$baseUrl$path').replace(
       queryParameters: query?.map(
         (key, value) => MapEntry(key, value.toString()),
       ),
     );
     final request = await HttpClient().getUrl(uri);
-    _setDefaultHeaders(request);
+    _setDefaultHeaders(request, headers: headers);
 
     final response = await _closeWithTimeout(request, uri);
     return _decodeResponse(response, uri);
   }
 
-  Future<dynamic> post(String path, Map<String, dynamic> body) async {
+  Future<dynamic> post(
+    String path,
+    Map<String, dynamic> body, {
+    Map<String, String>? headers,
+  }) async {
     final uri = Uri.parse('$baseUrl$path');
     final request = await HttpClient().postUrl(uri);
-    _setDefaultHeaders(request);
+    _setDefaultHeaders(request, headers: headers);
 
     request.write(jsonEncode(body));
     final response = await _closeWithTimeout(request, uri);
     return _decodeResponse(response, uri);
   }
 
-  Future<dynamic> patch(String path, {Map<String, dynamic>? body}) async {
+  Future<dynamic> patch(
+    String path, {
+    Map<String, dynamic>? body,
+    Map<String, String>? headers,
+  }) async {
     final uri = Uri.parse('$baseUrl$path');
     final request = await HttpClient().patchUrl(uri);
-    _setDefaultHeaders(request);
+    _setDefaultHeaders(request, headers: headers);
 
     if (body != null) {
       request.write(jsonEncode(body));
@@ -53,10 +65,14 @@ class ApiClient {
     return _decodeResponse(response, uri);
   }
 
-  Future<dynamic> put(String path, {Map<String, dynamic>? body}) async {
+  Future<dynamic> put(
+    String path, {
+    Map<String, dynamic>? body,
+    Map<String, String>? headers,
+  }) async {
     final uri = Uri.parse('$baseUrl$path');
     final request = await HttpClient().putUrl(uri);
-    _setDefaultHeaders(request);
+    _setDefaultHeaders(request, headers: headers);
 
     if (body != null) {
       request.write(jsonEncode(body));
@@ -66,12 +82,21 @@ class ApiClient {
     return _decodeResponse(response, uri);
   }
 
-  void _setDefaultHeaders(HttpClientRequest request) {
+  void _setDefaultHeaders(
+    HttpClientRequest request, {
+    Map<String, String>? headers,
+  }) {
     request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
 
     final authToken = token;
     if (authToken != null) {
       request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+    }
+
+    if (headers != null) {
+      for (final entry in headers.entries) {
+        request.headers.set(entry.key, entry.value);
+      }
     }
   }
 

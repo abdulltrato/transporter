@@ -70,6 +70,7 @@ class _RidePageState extends State<RidePage> {
   String _selectedPaymentMethod = 'mpesa';
   bool _isLoading = false;
   bool _isSavingDriverProfile = false;
+  bool _isUpdatingDriverStatus = false;
   bool _isSubmittingPayment = false;
   bool _isSubmittingRating = false;
   String? _errorMessage;
@@ -80,6 +81,8 @@ class _RidePageState extends State<RidePage> {
   bool get _isAuthenticated => (widget.token ?? '').trim().isNotEmpty;
   bool get _isClient => (widget.role ?? '').toLowerCase() == 'client';
   bool get _isDriver => (widget.role ?? '').toLowerCase() == 'driver';
+  bool get _isDriverOnline =>
+      (_driverProfile?.status.toLowerCase() ?? 'offline') == 'online';
 
   String? get _driverOperationalBlockReason {
     if (!_isDriver) {
@@ -438,6 +441,55 @@ class _RidePageState extends State<RidePage> {
       if (mounted) {
         setState(() {
           _isSavingDriverProfile = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _setDriverOnlineStatus({required bool goOnline}) async {
+    if (!_isDriver) {
+      return;
+    }
+
+    if (goOnline) {
+      final blockReason = _driverOperationalBlockReason;
+      if (blockReason != null) {
+        _showMessage(blockReason);
+        return;
+      }
+    }
+
+    setState(() {
+      _isUpdatingDriverStatus = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final updated = await widget.driversService.updateMyStatus(
+        status: goOnline ? 'online' : 'offline',
+      );
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _driverProfile = updated;
+      });
+
+      _showMessage(goOnline ? 'Taxista ficou online.' : 'Taxista ficou offline.');
+      await _loadDriverSubscriptionState();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _errorMessage = 'Falha ao atualizar estado online/offline: $error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdatingDriverStatus = false;
         });
       }
     }
@@ -1020,6 +1072,38 @@ class _RidePageState extends State<RidePage> {
                           : (_driverProfile!.isProfileComplete
                               ? 'Cadastro completo.'
                               : 'Cadastro incompleto. Preencha os dados abaixo.'),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Estado operacional: ${_isDriverOnline ? 'online' : 'offline'}',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        FilledButton.tonalIcon(
+                          onPressed:
+                              (_isUpdatingDriverStatus || _isDriverOnline)
+                              ? null
+                              : () => _setDriverOnlineStatus(goOnline: true),
+                          icon: const Icon(Icons.wifi_tethering),
+                          label: Text(
+                            _isUpdatingDriverStatus
+                                ? 'Atualizando...'
+                                : 'Ficar online',
+                          ),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed:
+                              (_isUpdatingDriverStatus || !_isDriverOnline)
+                              ? null
+                              : () => _setDriverOnlineStatus(goOnline: false),
+                          icon: const Icon(Icons.wifi_off),
+                          label: const Text('Ficar offline'),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 12),
                     TextField(

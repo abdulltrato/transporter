@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
+import '../../../models/driver_subscription.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({
     super.key,
     required this.onSubmit,
     required this.onSocialAuth,
+    required this.onLoadPendingSubscriptionsForAgent,
+    required this.onValidateSubscriptionForAgent,
+    required this.isAuthenticated,
+    required this.currentRole,
+    required this.onLogout,
     required this.isRobustModeEnabled,
     required this.nativeModeSummary,
     required this.onRobustModeChanged,
@@ -31,6 +37,21 @@ class LoginPage extends StatefulWidget {
     String? operatingRegion,
   })
   onSocialAuth;
+  final Future<List<DriverSubscription>> Function({
+    required String agentKey,
+  })
+  onLoadPendingSubscriptionsForAgent;
+  final Future<DriverSubscription> Function({
+    required String agentKey,
+    required String subscriptionId,
+    required String action,
+    required String agentName,
+    String? notes,
+  })
+  onValidateSubscriptionForAgent;
+  final bool isAuthenticated;
+  final String? currentRole;
+  final Future<void> Function() onLogout;
   final bool isRobustModeEnabled;
   final String nativeModeSummary;
   final ValueChanged<bool> onRobustModeChanged;
@@ -47,8 +68,15 @@ class _LoginPageState extends State<LoginPage> {
   final _documentExpiryController = TextEditingController();
   final _neighborhoodController = TextEditingController();
   final _operatingRegionController = TextEditingController();
+  final _agentKeyController = TextEditingController();
+  final _agentNameController = TextEditingController();
+  final _agentNotesController = TextEditingController();
   String _role = 'client';
   bool _isLoading = false;
+  bool _isAgentLoading = false;
+  bool _isValidatingSubscription = false;
+  List<DriverSubscription> _pendingSubscriptions = [];
+  String? _agentError;
 
   bool get _isDriver => _role == 'driver';
 
@@ -61,6 +89,9 @@ class _LoginPageState extends State<LoginPage> {
     _documentExpiryController.dispose();
     _neighborhoodController.dispose();
     _operatingRegionController.dispose();
+    _agentKeyController.dispose();
+    _agentNameController.dispose();
+    _agentNotesController.dispose();
     super.dispose();
   }
 
@@ -103,6 +134,126 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  Future<void> _logoutSession() async {
+    setState(() => _isLoading = true);
+    try {
+      await widget.onLogout();
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _refreshPendingSubscriptions() async {
+    final agentKey = _agentKeyController.text.trim();
+    if (agentKey.isEmpty) {
+      _showMessage('Informe a chave do agente.');
+      return;
+    }
+
+    setState(() {
+      _isAgentLoading = true;
+      _agentError = null;
+    });
+
+    try {
+      final items = await widget.onLoadPendingSubscriptionsForAgent(
+        agentKey: agentKey,
+      );
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _pendingSubscriptions = items;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _agentError = 'Falha ao carregar pendências: $error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAgentLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _validatePendingSubscription({
+    required DriverSubscription subscription,
+    required String action,
+  }) async {
+    final agentKey = _agentKeyController.text.trim();
+    final agentName = _agentNameController.text.trim();
+
+    if (agentKey.isEmpty) {
+      _showMessage('Informe a chave do agente.');
+      return;
+    }
+
+    if (agentName.isEmpty) {
+      _showMessage('Informe o nome do agente.');
+      return;
+    }
+
+    setState(() {
+      _isValidatingSubscription = true;
+      _agentError = null;
+    });
+
+    try {
+      await widget.onValidateSubscriptionForAgent(
+        agentKey: agentKey,
+        subscriptionId: subscription.id,
+        action: action,
+        agentName: agentName,
+        notes: _agentNotesController.text.trim(),
+      );
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _pendingSubscriptions = _pendingSubscriptions
+            .where((item) => item.id != subscription.id)
+            .toList();
+      });
+
+      final actionLabel = action == 'approve' ? 'aprovado' : 'rejeitado';
+      _showMessage('Pagamento $actionLabel com sucesso.');
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _agentError = 'Falha ao validar pagamento: $error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isValidatingSubscription = false;
+        });
+      }
+    }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -137,6 +288,33 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
           ),
+          if (widget.isAuthenticated) ...[
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Sessão ativa',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Perfil atual: ${(widget.currentRole ?? 'desconhecido').toLowerCase()}',
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: _isLoading ? null : _logoutSession,
+                      icon: const Icon(Icons.logout),
+                      label: const Text('Terminar sessão'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           TextField(
             controller: _nameController,
@@ -284,8 +462,138 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Painel de Agente',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Validação manual dos pagamentos de subscrição (M-Pesa/eMola).',
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _agentKeyController,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Chave do agente (x-agent-key)',
+                      prefixIcon: Icon(Icons.vpn_key_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _agentNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Nome do agente',
+                      prefixIcon: Icon(Icons.badge_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _agentNotesController,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'Notas da validação (opcional)',
+                      prefixIcon: Icon(Icons.notes_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.tonalIcon(
+                    onPressed: (_isAgentLoading || _isValidatingSubscription)
+                        ? null
+                        : _refreshPendingSubscriptions,
+                    icon: const Icon(Icons.sync),
+                    label: Text(
+                      _isAgentLoading
+                          ? 'Carregando pendências...'
+                          : 'Carregar pagamentos pendentes',
+                    ),
+                  ),
+                  if (_agentError != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      _agentError!,
+                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  if (_pendingSubscriptions.isEmpty)
+                    const Text('Sem pagamentos pendentes no momento.')
+                  else
+                    ..._pendingSubscriptions.map((item) {
+                      return Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Driver: ${item.driverId}',
+                                style: const TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                              Text('Plano: ${item.usageLabel}'),
+                              Text(
+                                'Pagamento: ${item.paymentMethod.toUpperCase()} · Ref: ${item.paymentReference}',
+                              ),
+                              Text(
+                                'Disponível para validar: ${_formatDateTime(item.validationAvailableAt)}',
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  FilledButton(
+                                    onPressed: _isValidatingSubscription
+                                        ? null
+                                        : () => _validatePendingSubscription(
+                                              subscription: item,
+                                              action: 'approve',
+                                            ),
+                                    child: const Text('Aprovar'),
+                                  ),
+                                  OutlinedButton(
+                                    onPressed: _isValidatingSubscription
+                                        ? null
+                                        : () => _validatePendingSubscription(
+                                              subscription: item,
+                                              action: 'reject',
+                                            ),
+                                    child: const Text('Rejeitar'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  String _formatDateTime(DateTime? value) {
+    if (value == null) {
+      return '-';
+    }
+
+    final local = value.toLocal();
+    final y = local.year.toString().padLeft(4, '0');
+    final m = local.month.toString().padLeft(2, '0');
+    final d = local.day.toString().padLeft(2, '0');
+    final hh = local.hour.toString().padLeft(2, '0');
+    final mm = local.minute.toString().padLeft(2, '0');
+    return '$y-$m-$d $hh:$mm';
   }
 }

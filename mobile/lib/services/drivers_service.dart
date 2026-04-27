@@ -38,6 +38,21 @@ class DriversService {
 
     return DriverProfile.fromJson(payload);
   }
+
+  Future<DriverProfile> updateMyStatus({
+    required String status,
+  }) async {
+    final response = await _apiClient.patch(
+      '/api/drivers/me/status',
+      body: {'status': status},
+    );
+    final payload = _asJsonMap(response);
+    if (payload == null) {
+      throw Exception('Resposta inválida ao atualizar estado do taxista.');
+    }
+
+    return DriverProfile.fromJson(payload);
+  }
 }
 
 Map<String, dynamic>? _asJsonMap(dynamic value) {
