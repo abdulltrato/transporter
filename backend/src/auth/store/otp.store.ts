@@ -8,6 +8,9 @@ export interface OtpRecord {
   codeHash: string;
   expiresAt: Date;
   attempts: number;
+  requestCount: number;
+  requestWindowStartedAt: Date;
+  lastIssuedAt: Date;
 }
 
 @Injectable()
@@ -28,7 +31,10 @@ export class OtpStore {
       phone: record.phone,
       codeHash: record.codeHash,
       expiresAt: record.expiresAt.toISOString(),
-      attempts: String(record.attempts)
+      attempts: String(record.attempts),
+      requestCount: String(record.requestCount),
+      requestWindowStartedAt: record.requestWindowStartedAt.toISOString(),
+      lastIssuedAt: record.lastIssuedAt.toISOString()
     });
     await this.redisService.getClient().expire(key, ttlSeconds);
   }
@@ -42,8 +48,22 @@ export class OtpStore {
     }
 
     const attempts = Number(raw.attempts ?? 0);
+    const requestCount = Number(raw.requestCount ?? 1);
     const expiresAt = new Date(raw.expiresAt);
-    if (Number.isNaN(expiresAt.getTime()) || !Number.isFinite(attempts)) {
+    const requestWindowStartedAt = raw.requestWindowStartedAt
+      ? new Date(raw.requestWindowStartedAt)
+      : new Date(expiresAt.getTime());
+    const lastIssuedAt = raw.lastIssuedAt
+      ? new Date(raw.lastIssuedAt)
+      : new Date(expiresAt.getTime());
+
+    if (
+      Number.isNaN(expiresAt.getTime()) ||
+      Number.isNaN(requestWindowStartedAt.getTime()) ||
+      Number.isNaN(lastIssuedAt.getTime()) ||
+      !Number.isFinite(attempts) ||
+      !Number.isFinite(requestCount)
+    ) {
       return undefined;
     }
 
@@ -52,7 +72,10 @@ export class OtpStore {
       phone: raw.phone,
       codeHash: raw.codeHash,
       expiresAt,
-      attempts
+      attempts,
+      requestCount,
+      requestWindowStartedAt,
+      lastIssuedAt
     };
   }
 

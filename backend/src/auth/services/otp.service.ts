@@ -1,6 +1,16 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  UnauthorizedException
+} from '@nestjs/common';
 import { createHash, randomInt } from 'node:crypto';
-import { getOtpTtlSeconds } from '../config/jwt.config';
+import {
+  getOtpMaxRequestsPerWindow,
+  getOtpRequestCooldownSeconds,
+  getOtpRequestWindowSeconds,
+  getOtpTtlSeconds
+} from '../config/jwt.config';
 import { OtpRecord, OtpStore } from '../store/otp.store';
 
 export interface IssuedOtp {
@@ -14,6 +24,50 @@ export class OtpService {
   constructor(private readonly otpStore: OtpStore) {}
 
   async issue(phone: string): Promise<IssuedOtp> {
+    const existing = await this.otpStore.findByPhone(phone);
+    const nowMs = Date.now();
+    const cooldownSeconds = getOtpRequestCooldownSeconds();
+    const windowSeconds = getOtpRequestWindowSeconds();
+    const maxRequests = getOtpMaxRequestsPerWindow();
+
+    const normalizedLastIssuedAt = existing
+      ? this.normalizeDate(existing.lastIssuedAt, nowMs)
+      : undefined;
+    const normalizedWindowStart = existing
+      ? this.normalizeDate(existing.requestWindowStartedAt, nowMs)
+      : undefined;
+
+    if (normalizedLastIssuedAt) {
+      const elapsedSeconds = Math.floor(
+        (nowMs - normalizedLastIssuedAt.getTime()) / 1000
+      );
+      const retryAfterSeconds = cooldownSeconds - elapsedSeconds;
+
+      if (retryAfterSeconds > 0) {
+        throw new HttpException(
+          `OTP was requested too recently. Try again in ${retryAfterSeconds} seconds.`,
+          HttpStatus.TOO_MANY_REQUESTS
+        );
+      }
+    }
+
+    const windowStart = normalizedWindowStart ?? new Date(nowMs);
+    const windowElapsedSeconds = Math.floor(
+      (nowMs - windowStart.getTime()) / 1000
+    );
+    const hasWindowExpired = windowElapsedSeconds >= windowSeconds;
+    const requestCount = hasWindowExpired
+      ? 0
+      : Math.max(0, existing?.requestCount ?? 0);
+
+    if (requestCount >= maxRequests) {
+      const retryAfterSeconds = Math.max(1, windowSeconds - windowElapsedSeconds);
+      throw new HttpException(
+        `OTP request limit reached. Try again in ${retryAfterSeconds} seconds.`,
+        HttpStatus.TOO_MANY_REQUESTS
+      );
+    }
+
     const code = randomInt(100000, 999999).toString();
     const expiresAt = new Date(Date.now() + getOtpTtlSeconds() * 1000);
 
@@ -22,7 +76,10 @@ export class OtpService {
       phone,
       codeHash: this.hash(phone, code),
       expiresAt,
-      attempts: 0
+      attempts: 0,
+      requestCount: requestCount + 1,
+      requestWindowStartedAt: hasWindowExpired ? new Date(nowMs) : windowStart,
+      lastIssuedAt: new Date(nowMs)
     };
 
     await this.otpStore.upsert(record);
@@ -69,6 +126,18 @@ export class OtpService {
 
   private hash(phone: string, code: string): string {
     return createHash('sha256').update(`${phone}:${code}`).digest('hex');
+  }
+
+  private normalizeDate(input: Date, fallbackNowMs: number): Date {
+    if (Number.isNaN(input.getTime())) {
+      return new Date(fallbackNowMs);
+    }
+
+    if (input.getTime() > fallbackNowMs) {
+      return new Date(fallbackNowMs);
+    }
+
+    return input;
   }
 
   private isDevModeEnabled(): boolean {

@@ -72,6 +72,47 @@ export class DatabaseService
 
       CREATE INDEX IF NOT EXISTS idx_driver_profiles_status ON driver_profiles(status);
 
+      CREATE TABLE IF NOT EXISTS user_social_identities (
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        provider TEXT NOT NULL CHECK (provider IN ('google', 'facebook')),
+        provider_user_id TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY (provider, provider_user_id),
+        UNIQUE (user_id, provider)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_user_social_identities_user_id
+        ON user_social_identities(user_id);
+
+      CREATE TABLE IF NOT EXISTS driver_subscriptions (
+        id UUID PRIMARY KEY,
+        driver_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        plan TEXT NOT NULL CHECK (
+          plan IN ('monthly', 'quarterly', 'semiannual', 'annual')
+        ),
+        payment_method TEXT NOT NULL CHECK (
+          payment_method IN ('mpesa', 'emola')
+        ),
+        payment_reference TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (
+          status IN ('pending_validation', 'active', 'rejected', 'expired')
+        ),
+        validation_available_at TIMESTAMPTZ NOT NULL,
+        validated_at TIMESTAMPTZ,
+        starts_at TIMESTAMPTZ,
+        ends_at TIMESTAMPTZ,
+        agent_name TEXT,
+        agent_notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_driver_subscriptions_driver_created
+        ON driver_subscriptions(driver_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_driver_subscriptions_status
+        ON driver_subscriptions(status);
+
       CREATE TABLE IF NOT EXISTS rides (
         id UUID PRIMARY KEY,
         client_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -117,6 +158,21 @@ export class DatabaseService
         ON rides(client_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_rides_driver_created_at
         ON rides(driver_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS driver_ratings (
+        id UUID PRIMARY KEY,
+        ride_id UUID NOT NULL UNIQUE REFERENCES rides(id) ON DELETE CASCADE,
+        driver_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        client_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        stars INTEGER NOT NULL CHECK (stars >= 1 AND stars <= 5),
+        created_at TIMESTAMPTZ NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_driver_ratings_driver_id
+        ON driver_ratings(driver_id);
+      CREATE INDEX IF NOT EXISTS idx_driver_ratings_client_id
+        ON driver_ratings(client_id);
     `);
   }
 }

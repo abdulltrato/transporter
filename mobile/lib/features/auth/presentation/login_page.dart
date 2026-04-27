@@ -4,6 +4,7 @@ class LoginPage extends StatefulWidget {
   const LoginPage({
     super.key,
     required this.onSubmit,
+    required this.onSocialAuth,
     required this.isRobustModeEnabled,
     required this.nativeModeSummary,
     required this.onRobustModeChanged,
@@ -14,8 +15,22 @@ class LoginPage extends StatefulWidget {
     required String phone,
     required String code,
     required String role,
+    String? documentId,
+    String? documentExpiry,
+    String? neighborhood,
+    String? operatingRegion,
   })
   onSubmit;
+  final Future<void> Function({
+    required String provider,
+    required String role,
+    required String fullName,
+    String? documentId,
+    String? documentExpiry,
+    String? neighborhood,
+    String? operatingRegion,
+  })
+  onSocialAuth;
   final bool isRobustModeEnabled;
   final String nativeModeSummary;
   final ValueChanged<bool> onRobustModeChanged;
@@ -28,14 +43,24 @@ class _LoginPageState extends State<LoginPage> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _codeController = TextEditingController();
+  final _documentIdController = TextEditingController();
+  final _documentExpiryController = TextEditingController();
+  final _neighborhoodController = TextEditingController();
+  final _operatingRegionController = TextEditingController();
   String _role = 'client';
   bool _isLoading = false;
+
+  bool get _isDriver => _role == 'driver';
 
   @override
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
     _codeController.dispose();
+    _documentIdController.dispose();
+    _documentExpiryController.dispose();
+    _neighborhoodController.dispose();
+    _operatingRegionController.dispose();
     super.dispose();
   }
 
@@ -47,6 +72,29 @@ class _LoginPageState extends State<LoginPage> {
         phone: _phoneController.text.trim(),
         code: _codeController.text.trim(),
         role: _role,
+        documentId: _documentIdController.text.trim(),
+        documentExpiry: _documentExpiryController.text.trim(),
+        neighborhood: _neighborhoodController.text.trim(),
+        operatingRegion: _operatingRegionController.text.trim(),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _submitSocial(String provider) async {
+    setState(() => _isLoading = true);
+    try {
+      await widget.onSocialAuth(
+        provider: provider,
+        role: _role,
+        fullName: _nameController.text.trim(),
+        documentId: _documentIdController.text.trim(),
+        documentExpiry: _documentExpiryController.text.trim(),
+        neighborhood: _neighborhoodController.text.trim(),
+        operatingRegion: _operatingRegionController.text.trim(),
       );
     } finally {
       if (mounted) {
@@ -119,6 +167,45 @@ class _LoginPageState extends State<LoginPage> {
               prefixIcon: Icon(Icons.lock_clock_outlined),
             ),
           ),
+          if (_isDriver) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _documentIdController,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Documento do taxista',
+                helperText: 'Obrigatório no cadastro do mototaxista.',
+                prefixIcon: Icon(Icons.badge),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _documentExpiryController,
+              keyboardType: TextInputType.datetime,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Validade do documento (AAAA-MM-DD)',
+                prefixIcon: Icon(Icons.event_available),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _neighborhoodController,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Bairro / residência',
+                prefixIcon: Icon(Icons.home_work_outlined),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _operatingRegionController,
+              decoration: const InputDecoration(
+                labelText: 'Região de atuação',
+                prefixIcon: Icon(Icons.place_outlined),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Card(
             child: Padding(
@@ -163,6 +250,39 @@ class _LoginPageState extends State<LoginPage> {
             onPressed: _isLoading ? null : _submit,
             icon: const Icon(Icons.login),
             label: Text(_isLoading ? 'Aguarde...' : 'Entrar'),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Login / Sign up social',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Use sua conta Google ou Facebook para entrar ou criar conta.',
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed:
+                        _isLoading ? null : () => _submitSocial('google'),
+                    icon: const Icon(Icons.g_mobiledata, size: 28),
+                    label: const Text('Continuar com Google'),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed:
+                        _isLoading ? null : () => _submitSocial('facebook'),
+                    icon: const Icon(Icons.facebook),
+                    label: const Text('Continuar com Facebook'),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),

@@ -11,6 +11,6 @@ import { RidesService } from './services/rides.service';
   imports: [DriversModule, LocationModule, RealtimeEventsModule],
   controllers: [RidesController],
   providers: [RidesRepository, DriverMatchingService, RidesService],
-  exports: [RidesService]
+  exports: [RidesService, RidesRepository]
 })
 export class RidesModule {}

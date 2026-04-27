@@ -10,10 +10,14 @@ import 'models/geo_point.dart';
 import 'services/api_client.dart';
 import 'services/auth_service.dart';
 import 'services/device_location_service.dart';
+import 'services/drivers_service.dart';
 import 'services/location_service.dart';
 import 'services/native_runtime_service.dart';
+import 'services/ratings_service.dart';
 import 'services/realtime_map_service.dart';
 import 'services/rides_service.dart';
+import 'services/social_auth_service.dart';
+import 'services/subscription_service.dart';
 
 void main() {
   runApp(const TransporterApp());
@@ -56,6 +60,10 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
 
   late final ApiClient _apiClient;
   late final AuthService _authService;
+  late final SocialAuthService _socialAuthService;
+  late final DriversService _driversService;
+  late final SubscriptionService _subscriptionService;
+  late final RatingsService _ratingsService;
   late final DeviceLocationService _deviceLocationService;
   late final LocationService _locationService;
   late final NativeRuntimeService _nativeRuntimeService;
@@ -68,6 +76,10 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
 
     _apiClient = ApiClient(baseUrl: _resolveApiBaseUrl());
     _authService = AuthService(_apiClient);
+    _socialAuthService = SocialAuthService();
+    _driversService = DriversService(_apiClient);
+    _subscriptionService = SubscriptionService(_apiClient);
+    _ratingsService = RatingsService(_apiClient);
     _deviceLocationService = const DeviceLocationService();
     _locationService = LocationService(_apiClient);
     _nativeRuntimeService = NativeRuntimeService(
@@ -104,6 +116,10 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
     required String phone,
     required String code,
     required String role,
+    String? documentId,
+    String? documentExpiry,
+    String? neighborhood,
+    String? operatingRegion,
   }) async {
     final sanitizedName = fullName.trim();
     final sanitizedPhone = phone.trim();
@@ -127,6 +143,10 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
         code: verificationCode,
         role: role,
         fullName: sanitizedName,
+        documentId: documentId,
+        documentExpiry: documentExpiry,
+        neighborhood: neighborhood,
+        operatingRegion: operatingRegion,
       );
 
       if (accessToken.isEmpty) {
@@ -134,24 +154,7 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
         return;
       }
 
-      _apiClient.token = accessToken;
-      _nativeRuntimeService.setSessionToken(accessToken);
-      _realtimeMapService.connect(token: accessToken);
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _accessToken = accessToken;
-        _currentRole = role;
-        _selectedIndex = 1;
-      });
-
-      final currentLocation = _currentLocation;
-      if (currentLocation != null) {
-        _scheduleLocationSync(currentLocation);
-      }
+      _activateSession(accessToken: accessToken, role: role);
 
       final otpHint = sanitizedCode.isEmpty
           ? 'OTP de desenvolvimento usado automaticamente.'
@@ -163,6 +166,86 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _handleSocialAuth({
+    required String provider,
+    required String role,
+    required String fullName,
+    String? documentId,
+    String? documentExpiry,
+    String? neighborhood,
+    String? operatingRegion,
+  }) async {
+    try {
+      final profile = switch (provider) {
+        'google' => await _socialAuthService.signInWithGoogle(),
+        'facebook' => await _socialAuthService.signInWithFacebook(),
+        _ => throw Exception('Provedor social não suportado.'),
+      };
+
+      if (profile == null) {
+        _showMessage('Login social cancelado.');
+        return;
+      }
+
+      final resolvedName = profile.fullName.trim().isNotEmpty
+          ? profile.fullName.trim()
+          : fullName.trim();
+
+      if (resolvedName.isEmpty) {
+        _showMessage(
+          'Não foi possível identificar seu nome. Preencha o nome completo e tente novamente.',
+        );
+        return;
+      }
+
+      final accessToken = await _authService.socialLogin(
+        provider: provider,
+        providerUserId: profile.providerUserId,
+        role: role,
+        fullName: resolvedName,
+        documentId: documentId,
+        documentExpiry: documentExpiry,
+        neighborhood: neighborhood,
+        operatingRegion: operatingRegion,
+      );
+
+      if (accessToken.isEmpty) {
+        _showMessage('Falha no login social: token de sessão inválido.');
+        return;
+      }
+
+      _activateSession(accessToken: accessToken, role: role);
+      final providerLabel = provider == 'google' ? 'Google' : 'Facebook';
+      _showMessage('Sessão iniciada com $providerLabel como $role.');
+    } catch (error) {
+      _showMessage('Falha no login social: $error');
+    }
+  }
+
+  void _activateSession({
+    required String accessToken,
+    required String role,
+  }) {
+    _apiClient.token = accessToken;
+    _nativeRuntimeService.setSessionToken(accessToken);
+    _realtimeMapService.connect(token: accessToken);
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _accessToken = accessToken;
+      _currentRole = role;
+      _selectedIndex = 1;
+    });
+
+    final currentLocation = _currentLocation;
+    if (currentLocation != null) {
+      _scheduleLocationSync(currentLocation);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final origin = _currentLocation ?? _defaultOrigin;
@@ -170,6 +253,7 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
     final pages = [
       LoginPage(
         onSubmit: _handleLogin,
+        onSocialAuth: _handleSocialAuth,
         isRobustModeEnabled: _nativeRuntimeService.isRobustMode,
         nativeModeSummary: _buildNativeModeSummary(),
         onRobustModeChanged: _setNativeMode,
@@ -184,6 +268,9 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
       RidePage(
         ridesService: _ridesService,
         realtimeMapService: _realtimeMapService,
+        driversService: _driversService,
+        subscriptionService: _subscriptionService,
+        ratingsService: _ratingsService,
         pickup: origin,
         hasLivePickup: _currentLocation != null,
         dropoff: _dropoffLocation,

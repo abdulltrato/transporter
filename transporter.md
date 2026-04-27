@@ -41,9 +41,11 @@ Principio adotado: **modulos pequenos e focados**, evitando arquivos grandes e a
 1. **Autenticacao**
 - `POST /api/auth/request-otp`
 - `POST /api/auth/verify-otp`
+- `POST /api/auth/social` (Google/Facebook com vinculo social)
 
 2. **Taxista**
 - completar perfil (documento, validade, bairro, regiao);
+- manter subscricao ativa via pagamento M-Pesa/eMola;
 - alterar status online/offline;
 - atualizar localizacao.
 
@@ -57,15 +59,28 @@ Principio adotado: **modulos pequenos e focados**, evitando arquivos grandes e a
 - prioridade pelo taxista mais proximo;
 - reatribuicao automatica se taxista rejeitar.
 
-5. **Tempo real (WebSocket)**
+5. **Subscricao do taxista (implementado)**
+- planos disponiveis: `mensal (30 dias)`, `trimestral (90 dias)`, `semestral (180 dias)`, `anual (365 dias)`;
+- pagamento via `M-Pesa` ou `eMola`;
+- cada pagamento entra em estado `pending_validation`;
+- validacao manual por agentes liberada apos 30 minutos;
+- aprovacao ativa a subscricao e expiracao calculada conforme o plano.
+
+6. **Tempo real (WebSocket)**
 - autenticacao JWT no handshake;
 - canal de mapa com eventos de status/localizacao de taxistas online;
 - canal de corrida com eventos de atualizacao para cliente e taxista envolvidos.
+
+7. **Avaliacao de taxistas (implementado)**
+- cliente avalia de `1` a `5` estrelas apos corrida concluida;
+- escala de satisfacao: `1 insatisfeito`, `2 pouco satisfeito`, `3 satisfeito`, `4 muito satisfeito`, `5 super satisfeito`;
+- media e distribuicao por estrelas disponiveis por taxista.
 
 ### 3.3 Endpoints MVP
 
 - `POST /api/auth/request-otp`
 - `POST /api/auth/verify-otp`
+- `POST /api/auth/social`
 - `GET /api/users/me`
 - `PATCH /api/users/me`
 - `GET /api/drivers/me/profile`
@@ -80,6 +95,14 @@ Principio adotado: **modulos pequenos e focados**, evitando arquivos grandes e a
 - `PATCH /api/rides/:rideId/start`
 - `PATCH /api/rides/:rideId/complete`
 - `GET /api/rides/me`
+- `POST /api/subscriptions/me/payment`
+- `GET /api/subscriptions/me/current`
+- `GET /api/subscriptions/me/history`
+- `GET /api/subscriptions/agent/pending` (header `x-agent-key`)
+- `PATCH /api/subscriptions/agent/:subscriptionId/validate` (header `x-agent-key`)
+- `POST /api/ratings/driver`
+- `GET /api/ratings/me/given`
+- `GET /api/ratings/drivers/:driverId/summary`
 - `WS /realtime`:
   - receber: `auth:error`, `map:snapshot`, `driver:status`, `driver:location`, `ride:updated`
   - enviar: `map:subscribe`, `map:unsubscribe`
@@ -141,12 +164,15 @@ Principio adotado: **modulos pequenos e focados**, evitando arquivos grandes e a
 Ja aplicado:
 - JWT para rotas autenticadas;
 - guard global com suporte a rotas publicas;
-- OTP com expiração e limite de tentativas.
+- OTP com expiração e limite de tentativas;
+- rate limit de OTP por telefone (cooldown entre requisicoes e limite por janela).
+- chave de agente (`AGENT_VALIDATION_KEY`) para validar subscricoes manualmente.
 
 Para proxima iteracao:
 - integracao real com provedor SMS;
-- rate limiting por IP/telefone;
-- persistencia de OTP e sessoes em Redis;
+- rate limiting por IP;
+- persistencia de sessoes em Redis;
+- verificacao criptografica de pagamentos M-Pesa/eMola com reconciliacao automatica;
 - auditoria e rastreio anti-fraude de localizacao.
 
 ## 8. Como Executar
@@ -171,8 +197,8 @@ API disponivel em: `http://localhost:3000/api`
 ## 9. Proximos Passos Recomendados
 
 1. Implementar notificacoes push para novos pedidos de corrida.
-2. Criar testes E2E (auth, online/offline, ride matching, reatribuicao).
-3. Integrar GPS real no mobile para pickup/dropoff dinamicos em vez de coordenadas fixas.
+2. Criar testes E2E (auth, online/offline, ride matching, reatribuicao, subscricao e avaliacao).
+3. Integrar reconciliacao automatica dos pagamentos M-Pesa/eMola.
 4. Persistir historico analitico de busca/matching para observabilidade operacional.
 
 ## 10. Status Atual

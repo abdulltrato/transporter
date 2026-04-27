@@ -6,9 +6,12 @@ Aplicação Flutter do Transporter para ligação entre clientes e taxistas em t
 
 - Manter uma interface simples e fácil de usar.
 - Oferecer autenticação por OTP para cliente/taxista.
+- Oferecer autenticação por OTP ou conta social (Google/Facebook).
 - Mostrar taxistas próximos com atualização em tempo real.
 - Gerir ciclo de vida completo da corrida.
 - Ativar um **modo nativo robusto** para resiliência em redes instáveis.
+- Permitir subscrição do mototaxista por plano (mensal, trimestral, semestral, anual) com pagamento M-Pesa/eMola e validação manual.
+- Permitir avaliação de taxistas em estrelas (1 a 5) após corrida concluída.
 
 ## Fluxo da interface
 

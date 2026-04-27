@@ -4,6 +4,7 @@ import { DriversModule } from '../drivers/drivers.module';
 import { UsersModule } from '../users/users.module';
 import { getJwtExpiresIn, getJwtSecret } from './config/jwt.config';
 import { AuthController } from './controllers/auth.controller';
+import { SocialIdentitiesRepository } from './repositories/social-identities.repository';
 import { AuthService } from './services/auth.service';
 import { OtpService } from './services/otp.service';
 import { TokenService } from './services/token.service';
@@ -21,7 +22,13 @@ import { OtpStore } from './store/otp.store';
     DriversModule
   ],
   controllers: [AuthController],
-  providers: [OtpStore, OtpService, TokenService, AuthService],
+  providers: [
+    OtpStore,
+    OtpService,
+    TokenService,
+    AuthService,
+    SocialIdentitiesRepository
+  ],
   exports: [JwtModule, TokenService]
 })
 export class AuthModule {}

@@ -6,8 +6,10 @@ import { DatabaseModule } from './database/database.module';
 import { DriversModule } from './drivers/drivers.module';
 import { LocationModule } from './location/location.module';
 import { RedisModule } from './redis/redis.module';
+import { RatingsModule } from './ratings/ratings.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { RidesModule } from './rides/rides.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -17,6 +19,8 @@ import { UsersModule } from './users/users.module';
     AuthModule,
     UsersModule,
     DriversModule,
+    SubscriptionsModule,
+    RatingsModule,
     LocationModule,
     RealtimeModule,
     RidesModule

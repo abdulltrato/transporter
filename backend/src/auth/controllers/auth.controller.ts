@@ -1,6 +1,7 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
 import { RequestOtpDto } from '../dto/request-otp.dto';
+import { SocialAuthDto } from '../dto/social-auth.dto';
 import { VerifyOtpDto } from '../dto/verify-otp.dto';
 import { AuthService } from '../services/auth.service';
 
@@ -24,5 +25,13 @@ export class AuthController {
     @Body() body: VerifyOtpDto
   ): ReturnType<AuthService['verifyOtp']> {
     return this.authService.verifyOtp(body);
+  }
+
+  @Public()
+  @Post('social')
+  socialAuth(
+    @Body() body: SocialAuthDto
+  ): ReturnType<AuthService['socialLogin']> {
+    return this.authService.socialLogin(body);
   }
 }
