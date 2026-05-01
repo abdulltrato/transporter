@@ -9,7 +9,6 @@ import { DriverStatus } from '../../common/enums/driver-status.enum';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { isAuthorizationBypassEnabled } from '../../common/utils/auth-bypass.util';
 import { RealtimeEventsService } from '../../realtime/events/realtime-events.service';
-import { SubscriptionsService } from '../../subscriptions/services/subscriptions.service';
 import { UsersService } from '../../users/services/users.service';
 import { UpdateDriverProfileDto } from '../dto/update-driver-profile.dto';
 import { DriverProfileEntity } from '../entities/driver-profile.entity';
@@ -26,7 +25,6 @@ export class DriversService implements OnModuleInit {
     private readonly profilesRepository: DriverProfilesRepository,
     private readonly presenceStore: DriverPresenceStore,
     private readonly validator: DriverProfileValidatorService,
-    private readonly subscriptionsService: SubscriptionsService,
     private readonly realtimeEvents: RealtimeEventsService
   ) {}
 
@@ -84,7 +82,6 @@ export class DriversService implements OnModuleInit {
 
     if (status === DriverStatus.ONLINE) {
       this.validator.assertCanGoOnline(current);
-      await this.subscriptionsService.assertDriverCanOperate(userId);
     }
 
     const updated: DriverProfileEntity = {

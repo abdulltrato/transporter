@@ -105,7 +105,7 @@ class RealtimeMapService {
   final Duration maxReconnectDelay;
 
   io.Socket? _socket;
-  String? _token;
+  String? _sessionUserId;
   bool _manualDisconnect = false;
   int _reconnectAttempt = 0;
   Timer? _reconnectTimer;
@@ -132,14 +132,14 @@ class RealtimeMapService {
 
   bool get isConnected => _socket?.connected ?? false;
 
-  void connect({required String token}) {
-    final sanitizedToken = token.trim();
-    if (sanitizedToken.isEmpty) {
+  void connect({required String userId}) {
+    final sanitizedUserId = userId.trim();
+    if (sanitizedUserId.isEmpty) {
       disconnect();
       return;
     }
 
-    if (_token == sanitizedToken && _socket != null) {
+    if (_sessionUserId == sanitizedUserId && _socket != null) {
       _manualDisconnect = false;
       _cancelReconnectTimer();
 
@@ -152,13 +152,13 @@ class RealtimeMapService {
       return;
     }
 
-    _token = sanitizedToken;
+    _sessionUserId = sanitizedUserId;
     _openSocketConnection();
   }
 
   void reconnect() {
-    final token = _token;
-    if (token == null || token.trim().isEmpty) {
+    final userId = _sessionUserId;
+    if (userId == null || userId.trim().isEmpty) {
       return;
     }
 
@@ -198,8 +198,8 @@ class RealtimeMapService {
   }
 
   void _openSocketConnection() {
-    final sanitizedToken = (_token ?? '').trim();
-    if (sanitizedToken.isEmpty) {
+    final sanitizedUserId = (_sessionUserId ?? '').trim();
+    if (sanitizedUserId.isEmpty) {
       return;
     }
 
@@ -213,8 +213,8 @@ class RealtimeMapService {
       _buildRealtimeUrl(),
       io.OptionBuilder()
           .setTransports(['websocket'])
-          .setAuth({'token': sanitizedToken})
-          .setExtraHeaders({'Authorization': 'Bearer $sanitizedToken'})
+          .setAuth({'userId': sanitizedUserId})
+          .setExtraHeaders({'x-transporter-user-id': sanitizedUserId})
           .disableAutoConnect()
           .build(),
     );
@@ -293,8 +293,8 @@ class RealtimeMapService {
       return;
     }
 
-    final token = _token;
-    if (token == null || token.trim().isEmpty) {
+    final userId = _sessionUserId;
+    if (userId == null || userId.trim().isEmpty) {
       return;
     }
 

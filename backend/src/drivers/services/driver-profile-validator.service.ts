@@ -13,12 +13,6 @@ export class DriverProfileValidatorService {
   }
 
   assertCanGoOnline(profile: DriverProfileEntity): void {
-    if (!this.isProfileComplete(profile)) {
-      throw new BadRequestException(
-        'Driver profile is incomplete. Fill documentId, documentExpiry, neighborhood and operatingRegion before going online.'
-      );
-    }
-
     if (profile.documentExpiry && new Date(profile.documentExpiry).getTime() < Date.now()) {
       throw new BadRequestException('Driver document is expired.');
     }

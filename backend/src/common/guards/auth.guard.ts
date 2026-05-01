@@ -40,17 +40,23 @@ export class AuthGuard implements CanActivate {
       user?: RequestUser;
     }>();
 
-    if (isAuthBypassEnabled()) {
-      request.user = await this.resolveBypassUser(request.headers);
-      return true;
-    }
-
     const isPublicRoute = this.reflector.getAllAndOverride<boolean>(PUBLIC_ROUTE_KEY, [
       context.getHandler(),
       context.getClass()
     ]);
 
+    const sessionUser = await this.resolveHeaderSessionUser(request.headers);
+    if (sessionUser) {
+      request.user = sessionUser;
+      return true;
+    }
+
     if (isPublicRoute) {
+      return true;
+    }
+
+    if (isAuthBypassEnabled()) {
+      request.user = await this.resolveBypassUser(request.headers);
       return true;
     }
 
@@ -80,6 +86,26 @@ export class AuthGuard implements CanActivate {
     } catch {
       throw new UnauthorizedException('Invalid or expired token.');
     }
+  }
+
+  private async resolveHeaderSessionUser(
+    headers: Record<string, string | string[] | undefined>
+  ): Promise<RequestUser | undefined> {
+    const userId = this.getHeaderValue(headers, 'x-transporter-user-id');
+    if (!userId) {
+      return undefined;
+    }
+
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      return undefined;
+    }
+
+    return {
+      id: user.id,
+      phone: user.phone,
+      role: user.role
+    };
   }
 
   private async resolveBypassUser(

@@ -14,6 +14,10 @@ export class UsersService {
     return this.usersRepository.findByPhone(phone);
   }
 
+  async findById(userId: string): Promise<UserEntity | undefined> {
+    return this.usersRepository.findById(userId);
+  }
+
   async findByIdOrThrow(userId: string): Promise<UserEntity> {
     const user = await this.usersRepository.findById(userId);
 

@@ -14,14 +14,14 @@ class MapPage extends StatefulWidget {
     required this.realtimeMapService,
     required this.origin,
     required this.radiusKm,
-    required this.token,
+    required this.userId,
   });
 
   final LocationService locationService;
   final RealtimeMapService realtimeMapService;
   final GeoPoint origin;
   final double radiusKm;
-  final String? token;
+  final String? userId;
 
   @override
   State<MapPage> createState() => _MapPageState();
@@ -42,7 +42,7 @@ class _MapPageState extends State<MapPage> {
   late final StreamSubscription<DriverLocationUpdate> _locationSubscription;
   late final StreamSubscription<String> _errorSubscription;
 
-  bool get _isAuthenticated => (widget.token ?? '').trim().isNotEmpty;
+  bool get _isAuthenticated => (widget.userId ?? '').trim().isNotEmpty;
 
   @override
   void initState() {
@@ -74,7 +74,7 @@ class _MapPageState extends State<MapPage> {
   void didUpdateWidget(covariant MapPage oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (oldWidget.token != widget.token ||
+    if (oldWidget.userId != widget.userId ||
         oldWidget.origin.lat != widget.origin.lat ||
         oldWidget.origin.lng != widget.origin.lng ||
         oldWidget.radiusKm != widget.radiusKm) {
@@ -94,8 +94,8 @@ class _MapPageState extends State<MapPage> {
   }
 
   Future<void> _startRealtimeFlow() async {
-    final token = widget.token?.trim();
-    if (token == null || token.isEmpty) {
+    final userId = widget.userId?.trim();
+    if (userId == null || userId.isEmpty) {
       widget.realtimeMapService.disconnect();
       if (!mounted) {
         return;
@@ -109,7 +109,7 @@ class _MapPageState extends State<MapPage> {
     }
 
     await _loadNearbyDrivers();
-    widget.realtimeMapService.connect(token: token);
+    widget.realtimeMapService.connect(userId: userId);
     if (widget.realtimeMapService.isConnected) {
       widget.realtimeMapService.subscribeToMap(
         origin: widget.origin,

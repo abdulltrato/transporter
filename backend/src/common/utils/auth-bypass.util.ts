@@ -3,7 +3,7 @@ import { UserRole } from '../enums/user-role.enum';
 const DISABLED_VALUES = new Set(['0', 'false', 'no', 'off']);
 
 export function isAuthBypassEnabled(): boolean {
-  return isToggleEnabled(process.env.TRANSPORTER_AUTH_BYPASS, true);
+  return isToggleEnabled(process.env.TRANSPORTER_AUTH_BYPASS, false);
 }
 
 export function isAuthorizationBypassEnabled(): boolean {

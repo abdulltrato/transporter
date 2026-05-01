@@ -10,12 +10,16 @@ class ApiClient {
   ApiClient({
     required this.baseUrl,
     this.token,
+    this.currentUserId,
+    this.currentRole,
     this.requestTimeout = const Duration(seconds: 12),
   });
 
   final String baseUrl;
   final Duration requestTimeout;
   String? token;
+  String? currentUserId;
+  String? currentRole;
 
   Future<dynamic> get(
     String path, {
@@ -89,8 +93,18 @@ class ApiClient {
     request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
 
     final authToken = token;
-    if (authToken != null) {
+    if (authToken != null && authToken.trim().isNotEmpty) {
       request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+    }
+
+    final userId = currentUserId?.trim();
+    if (userId != null && userId.isNotEmpty) {
+      request.headers.set('x-transporter-user-id', userId);
+    }
+
+    final role = currentRole?.trim();
+    if (role != null && role.isNotEmpty) {
+      request.headers.set('x-transporter-role', role);
     }
 
     if (headers != null) {

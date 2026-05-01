@@ -2,13 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
 import 'core/app_theme.dart';
 import 'features/auth/presentation/login_page.dart';
 import 'features/map/presentation/map_page.dart';
 import 'features/ride/presentation/ride_page.dart';
 import 'models/geo_point.dart';
-import 'models/driver_subscription.dart';
-import 'services/agent_subscriptions_service.dart';
 import 'services/api_client.dart';
 import 'services/auth_service.dart';
 import 'services/device_location_service.dart';
@@ -19,8 +18,6 @@ import 'services/ratings_service.dart';
 import 'services/realtime_map_service.dart';
 import 'services/rides_service.dart';
 import 'services/session_storage_service.dart';
-import 'services/social_auth_service.dart';
-import 'services/subscription_service.dart';
 
 void main() {
   runApp(const TransporterApp());
@@ -50,15 +47,9 @@ class _HomeShell extends StatefulWidget {
 class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
   static const _defaultOrigin = GeoPoint(lat: -25.9653, lng: 32.5892);
   static const _defaultRadiusKm = 5.0;
-  static const _guestRole = 'client';
-  static const _authBypassRaw = String.fromEnvironment(
-    'TRANSPORTER_AUTH_BYPASS',
-    defaultValue: 'true',
-  );
-  static final _isAuthBypassEnabled = !_isBypassDisabled(_authBypassRaw);
 
-  int _selectedIndex = 1;
-  String? _accessToken;
+  int _selectedIndex = 0;
+  String? _currentUserId;
   String? _currentRole;
   GeoPoint? _currentLocation;
   GeoPoint? _dropoffLocation;
@@ -69,11 +60,8 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
 
   late final ApiClient _apiClient;
   late final AuthService _authService;
-  late final AgentSubscriptionsService _agentSubscriptionsService;
   late final SessionStorageService _sessionStorageService;
-  late final SocialAuthService _socialAuthService;
   late final DriversService _driversService;
-  late final SubscriptionService _subscriptionService;
   late final RatingsService _ratingsService;
   late final DeviceLocationService _deviceLocationService;
   late final LocationService _locationService;
@@ -87,17 +75,12 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
 
     _apiClient = ApiClient(baseUrl: _resolveApiBaseUrl());
     _authService = AuthService(_apiClient);
-    _agentSubscriptionsService = AgentSubscriptionsService(_apiClient);
     _sessionStorageService = SessionStorageService();
-    _socialAuthService = SocialAuthService();
     _driversService = DriversService(_apiClient);
-    _subscriptionService = SubscriptionService(_apiClient);
     _ratingsService = RatingsService(_apiClient);
     _deviceLocationService = const DeviceLocationService();
     _locationService = LocationService(_apiClient);
-    _nativeRuntimeService = NativeRuntimeService(
-      mode: NativeRuntimeMode.robust,
-    );
+    _nativeRuntimeService = NativeRuntimeService(mode: NativeRuntimeMode.robust);
     _nativeSnapshotSubscription = _nativeRuntimeService.snapshotStream.listen(
       _handleNativeSnapshot,
     );
@@ -106,7 +89,7 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
 
     WidgetsBinding.instance.addObserver(this);
     _nativeRuntimeService.updateForegroundState(true);
-    unawaited(_enterGuestMode());
+    unawaited(_restoreSession());
     unawaited(_startLocationTracking());
   }
 
@@ -125,175 +108,82 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
     _nativeRuntimeService.updateForegroundState(_isForegroundState(state));
   }
 
-  Future<void> _enterGuestMode() async {
-    if (_isAuthBypassEnabled) {
-      await _activateSession(
-        accessToken: _buildBypassToken(_guestRole),
-        role: _guestRole,
-      );
+  Future<void> _restoreSession() async {
+    final stored = await _sessionStorageService.loadSession();
+    if (stored == null) {
       return;
     }
 
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _accessToken = null;
-      _currentRole = _guestRole;
-      _selectedIndex = 1;
-    });
+    await _activateSession(
+      userId: stored.userId,
+      role: stored.role,
+      persist: false,
+    );
   }
 
-  Future<void> _handleLogin({
+  Future<void> _handleRegister({
     required String fullName,
     required String phone,
-    required String code,
     required String role,
     String? documentId,
     String? documentExpiry,
     String? neighborhood,
     String? operatingRegion,
   }) async {
-    final resolvedRole = _normalizeRole(role);
-    if (_isAuthBypassEnabled) {
-      await _activateSession(
-        accessToken: _buildBypassToken(resolvedRole),
-        role: resolvedRole,
-      );
-      _showMessage('Modo de teste ativo: sessão local como $resolvedRole.');
+    final normalizedRole = _normalizeRole(role);
+    if (fullName.trim().isEmpty) {
+      _showMessage('Indique um nome completo válido.');
       return;
     }
-
-    final sanitizedName = fullName.trim();
-    final sanitizedPhone = phone.trim();
-    final sanitizedCode = code.trim();
-
-    if (sanitizedPhone.isEmpty) {
+    if (phone.trim().isEmpty) {
       _showMessage('Indique um telefone válido.');
       return;
     }
 
-    if (sanitizedName.isEmpty) {
-      _showMessage('Indique o seu nome completo.');
-      return;
-    }
-
     try {
-      if (sanitizedCode.isEmpty) {
-        final devCode = await _authService.requestOtp(sanitizedPhone);
-        final codeHint =
-            devCode.isNotEmpty ? ' Código de desenvolvimento: $devCode' : '';
-        _showMessage(
-          'Pedido de login/cadastro enviado. Introduza o OTP para concluir.$codeHint',
-        );
-        return;
-      }
-
-      final accessToken = await _authService.verifyOtp(
-        phone: sanitizedPhone,
-        code: sanitizedCode,
-        role: resolvedRole,
-        fullName: sanitizedName,
+      final registration = await _authService.register(
+        fullName: fullName,
+        phone: phone,
+        role: normalizedRole,
         documentId: documentId,
         documentExpiry: documentExpiry,
         neighborhood: neighborhood,
         operatingRegion: operatingRegion,
       );
 
-      if (accessToken.isEmpty) {
-        _showMessage('Falha no login: token de sessão inválido.');
-        return;
-      }
-
-      await _activateSession(accessToken: accessToken, role: resolvedRole);
-      _showMessage('Sessão iniciada como $resolvedRole.');
-    } catch (error) {
-      _showMessage('Falha no login: $error');
-    }
-  }
-
-  Future<void> _handleSocialAuth({
-    required String provider,
-    required String role,
-    required String fullName,
-    String? documentId,
-    String? documentExpiry,
-    String? neighborhood,
-    String? operatingRegion,
-  }) async {
-    final resolvedRole = _normalizeRole(role);
-    if (_isAuthBypassEnabled) {
       await _activateSession(
-        accessToken: _buildBypassToken(resolvedRole),
-        role: resolvedRole,
+        userId: registration.userId,
+        role: registration.role,
+        persist: true,
       );
-      _showMessage('Modo de teste ativo: sessão local como $resolvedRole.');
-      return;
-    }
-
-    try {
-      final profile = switch (provider) {
-        'google' => await _socialAuthService.signInWithGoogle(),
-        'facebook' => await _socialAuthService.signInWithFacebook(),
-        _ => throw Exception('Provedor social não suportado.'),
-      };
-
-      if (profile == null) {
-        _showMessage('Login social cancelado.');
-        return;
-      }
-
-      final resolvedName = profile.fullName.trim().isNotEmpty
-          ? profile.fullName.trim()
-          : fullName.trim();
-
-      if (resolvedName.isEmpty) {
-        _showMessage(
-          'Não foi possível identificar seu nome. Preencha o nome completo e tente novamente.',
-        );
-        return;
-      }
-
-      final accessToken = await _authService.socialLogin(
-        provider: provider,
-        providerUserId: profile.providerUserId,
-        role: resolvedRole,
-        fullName: resolvedName,
-        documentId: documentId,
-        documentExpiry: documentExpiry,
-        neighborhood: neighborhood,
-        operatingRegion: operatingRegion,
-      );
-
-      if (accessToken.isEmpty) {
-        _showMessage('Falha no login social: token de sessão inválido.');
-        return;
-      }
-
-      await _activateSession(accessToken: accessToken, role: resolvedRole);
-      final providerLabel = provider == 'google' ? 'Google' : 'Facebook';
-      _showMessage('Sessão iniciada com $providerLabel como $resolvedRole.');
+      _showMessage('Sessão iniciada como ${_roleLabel(registration.role)}.');
     } catch (error) {
-      _showMessage('Falha no login social: $error');
+      _showMessage('Falha no cadastro: $error');
     }
   }
 
   Future<void> _activateSession({
-    required String accessToken,
+    required String userId,
     required String role,
+    required bool persist,
   }) async {
-    _apiClient.token = accessToken;
-    _nativeRuntimeService.setSessionToken(accessToken);
-    _realtimeMapService.connect(token: accessToken);
+    final normalizedUserId = userId.trim();
+    final normalizedRole = _normalizeRole(role);
+
+    _apiClient.currentUserId = normalizedUserId;
+    _apiClient.currentRole = normalizedRole;
+    _apiClient.token = null;
+
+    _nativeRuntimeService.setSessionToken(normalizedUserId);
+    _realtimeMapService.connect(userId: normalizedUserId);
 
     if (!mounted) {
       return;
     }
 
     setState(() {
-      _accessToken = accessToken;
-      _currentRole = role;
+      _currentUserId = normalizedUserId;
+      _currentRole = normalizedRole;
       _selectedIndex = 1;
     });
 
@@ -302,62 +192,48 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
       _scheduleLocationSync(currentLocation);
     }
 
-    await _sessionStorageService.saveSession(
-      accessToken: accessToken,
-      role: role,
-    );
+    if (persist) {
+      await _sessionStorageService.saveSession(
+        userId: normalizedUserId,
+        role: normalizedRole,
+      );
+    }
   }
 
   Future<void> _logout() async {
     _realtimeMapService.disconnect();
-    _apiClient.token = null;
     _nativeRuntimeService.setSessionToken(null);
+    _apiClient.token = null;
+    _apiClient.currentUserId = null;
+    _apiClient.currentRole = null;
     await _sessionStorageService.clearSession();
 
-    await _enterGuestMode();
-    _showMessage('Modo de teste sem autenticação ativo.');
-  }
+    if (!mounted) {
+      return;
+    }
 
-  Future<List<DriverSubscription>> _loadPendingSubscriptionsForAgent({
-    required String agentKey,
-  }) {
-    return _agentSubscriptionsService.listPending(agentKey: agentKey);
-  }
-
-  Future<DriverSubscription> _validateSubscriptionForAgent({
-    required String agentKey,
-    required String subscriptionId,
-    required String action,
-    required String agentName,
-    String? notes,
-  }) {
-    return _agentSubscriptionsService.validate(
-      agentKey: agentKey,
-      subscriptionId: subscriptionId,
-      action: action,
-      agentName: agentName,
-      notes: notes,
-    );
+    setState(() {
+      _currentUserId = null;
+      _currentRole = null;
+      _selectedIndex = 0;
+    });
+    _showMessage('Sessão terminada.');
   }
 
   @override
   Widget build(BuildContext context) {
     final origin = _currentLocation ?? _defaultOrigin;
-    final role = _currentRole ?? _guestRole;
-    final token = _accessToken;
+    final role = _currentRole ?? 'client';
+    final userId = _currentUserId;
 
     final pages = [
       LoginPage(
-        onSubmit: _handleLogin,
-        onSocialAuth: _handleSocialAuth,
-        onLoadPendingSubscriptionsForAgent: _loadPendingSubscriptionsForAgent,
-        onValidateSubscriptionForAgent: _validateSubscriptionForAgent,
-        isAuthBypassEnabled: _isAuthBypassEnabled,
-        isAuthenticated: (_accessToken ?? '').trim().isNotEmpty,
+        onRegister: _handleRegister,
+        isAuthenticated: (userId ?? '').isNotEmpty,
         currentRole: _currentRole,
         onLogout: _logout,
         isRobustModeEnabled: _nativeRuntimeService.isRobustMode,
-        nativeModeSummary: 'Modo de teste sem autenticação · ${_buildNativeModeSummary()}',
+        nativeModeSummary: _buildNativeModeSummary(),
         onRobustModeChanged: _setNativeMode,
       ),
       MapPage(
@@ -365,13 +241,12 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
         realtimeMapService: _realtimeMapService,
         origin: origin,
         radiusKm: _defaultRadiusKm,
-        token: token,
+        userId: userId,
       ),
       RidePage(
         ridesService: _ridesService,
         realtimeMapService: _realtimeMapService,
         driversService: _driversService,
-        subscriptionService: _subscriptionService,
         ratingsService: _ratingsService,
         pickup: origin,
         hasLivePickup: _currentLocation != null,
@@ -380,9 +255,8 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
         onSelectDropoffFromMap: _setDropoffFromMap,
         onClearDropoff: _clearDropoff,
         locationWarning: _locationWarning,
-        token: token,
+        userId: userId,
         role: role,
-        isAuthBypassEnabled: _isAuthBypassEnabled,
       ),
     ];
 
@@ -395,10 +269,7 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
           NavigationBar(
             selectedIndex: _selectedIndex,
             destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.lock_open),
-                label: 'Acesso',
-              ),
+              NavigationDestination(icon: Icon(Icons.person_add), label: 'Acesso'),
               NavigationDestination(icon: Icon(Icons.map), label: 'Mapa'),
               NavigationDestination(
                 icon: Icon(Icons.directions_bike),
@@ -420,10 +291,7 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
     if (!mounted) {
       return;
     }
-
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _startLocationTracking() async {
@@ -464,18 +332,15 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
         if (!mounted) {
           return;
         }
-
         setState(() {
           _currentLocation = point;
         });
-
         _scheduleLocationSync(point);
       },
       onError: (Object error) {
         if (!mounted) {
           return;
         }
-
         setState(() {
           _locationWarning = 'Falha ao ler o GPS: $error';
         });
@@ -484,6 +349,10 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
   }
 
   void _scheduleLocationSync(GeoPoint point) {
+    if ((_currentUserId ?? '').trim().isEmpty) {
+      return;
+    }
+
     _nativeRuntimeService.scheduleLocationSync(
       point,
       sender: (nextPoint) async {
@@ -524,7 +393,6 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
     if (!mounted) {
       return;
     }
-
     setState(() {
       _dropoffLocation = point;
     });
@@ -534,7 +402,6 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
     if (!mounted) {
       return;
     }
-
     setState(() {
       _dropoffLocation = null;
     });
@@ -550,7 +417,6 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
     if (!mounted) {
       return;
     }
-
     setState(() {
       _nativeSnapshot = snapshot;
     });
@@ -587,21 +453,13 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
     return 'http://localhost:3000';
   }
 
-  String _buildBypassToken(String role) {
-    return 'bypass-${_normalizeRole(role)}-token';
-  }
-
   String _normalizeRole(String role) {
     final normalized = role.trim().toLowerCase();
     return normalized == 'driver' ? 'driver' : 'client';
   }
 
-  static bool _isBypassDisabled(String value) {
-    final normalized = value.trim().toLowerCase();
-    return normalized == '0' ||
-        normalized == 'false' ||
-        normalized == 'no' ||
-        normalized == 'off';
+  String _roleLabel(String role) {
+    return _normalizeRole(role) == 'driver' ? 'taxista' : 'cliente';
   }
 }
 
@@ -623,14 +481,14 @@ class _NativeModeStatusBar extends StatelessWidget {
     final retryInfo = snapshot.retryAttempt > 0
         ? ' · Tentativa ${snapshot.retryAttempt}'
         : '';
-    final authInfo = snapshot.hasSessionToken ? '' : ' · Sem sessão';
+    final sessionInfo = snapshot.hasSessionToken ? '' : ' · Sem sessão';
 
     return Container(
       width: double.infinity,
       color: backgroundColor,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Text(
-        'Modo ${snapshot.modeLabel} · ${snapshot.stateLabel}$retryInfo$authInfo',
+        'Modo ${snapshot.modeLabel} · ${snapshot.stateLabel}$retryInfo$sessionInfo',
         style: theme.textTheme.bodySmall,
       ),
     );

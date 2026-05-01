@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { DriversService } from '../../drivers/services/drivers.service';
 import { UsersService } from '../../users/services/users.service';
+import { RegisterUserDto } from '../dto/register-user.dto';
 import { RequestOtpDto } from '../dto/request-otp.dto';
 import { SocialAuthDto } from '../dto/social-auth.dto';
 import { VerifyOtpDto } from '../dto/verify-otp.dto';
@@ -19,6 +20,49 @@ export class AuthService {
     private readonly socialIdentitiesRepository: SocialIdentitiesRepository,
     private readonly tokenService: TokenService
   ) {}
+
+  async register(input: RegisterUserDto): Promise<{
+    user: ReturnType<UsersService['toPublicUser']>;
+    session: {
+      userId: string;
+      role: UserRole;
+    };
+  }> {
+    const phone = input.phone.trim();
+    const fullName = input.fullName.trim();
+
+    let user = await this.usersService.findByPhone(phone);
+    if (!user) {
+      user = await this.usersService.create({
+        fullName,
+        phone,
+        role: input.role
+      });
+    } else if (user.role !== input.role) {
+      throw new BadRequestException(
+        'This phone number is already linked to a different role.'
+      );
+    } else if (fullName && fullName !== user.fullName) {
+      user = await this.usersService.updateMyProfile(user.id, fullName);
+    }
+
+    if (user.role === UserRole.DRIVER) {
+      await this.driversService.ensureProfile(user.id);
+      const profileUpdate = this.buildDriverProfileUpdate(input);
+
+      if (Object.keys(profileUpdate).length > 0) {
+        await this.driversService.updateProfile(user.id, profileUpdate);
+      }
+    }
+
+    return {
+      user: this.usersService.toPublicUser(user),
+      session: {
+        userId: user.id,
+        role: user.role
+      }
+    };
+  }
 
   async requestOtp(input: RequestOtpDto): Promise<{
     requestId: string;
@@ -209,5 +253,46 @@ export class AuthService {
         'operatingRegion is required for driver registration.'
       );
     }
+  }
+
+  private buildDriverProfileUpdate(
+    input: Pick<
+      RegisterUserDto,
+      'documentId' | 'documentExpiry' | 'neighborhood' | 'operatingRegion'
+    >
+  ): {
+    documentId?: string;
+    documentExpiry?: string;
+    neighborhood?: string;
+    operatingRegion?: string;
+  } {
+    const update: {
+      documentId?: string;
+      documentExpiry?: string;
+      neighborhood?: string;
+      operatingRegion?: string;
+    } = {};
+
+    const documentId = input.documentId?.trim();
+    if (documentId) {
+      update.documentId = documentId;
+    }
+
+    const documentExpiry = input.documentExpiry?.trim();
+    if (documentExpiry) {
+      update.documentExpiry = documentExpiry;
+    }
+
+    const neighborhood = input.neighborhood?.trim();
+    if (neighborhood) {
+      update.neighborhood = neighborhood;
+    }
+
+    const operatingRegion = input.operatingRegion?.trim();
+    if (operatingRegion) {
+      update.operatingRegion = operatingRegion;
+    }
+
+    return update;
   }
 }

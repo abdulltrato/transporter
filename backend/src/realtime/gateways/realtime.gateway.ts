@@ -126,6 +126,11 @@ export class RealtimeGateway
   }
 
   private async authenticateClient(client: Socket): Promise<RequestUser | undefined> {
+    const headerSessionUser = await this.resolveHeaderSessionUser(client);
+    if (headerSessionUser) {
+      return headerSessionUser;
+    }
+
     if (isAuthBypassEnabled()) {
       return this.resolveBypassUser(client);
     }
@@ -155,6 +160,33 @@ export class RealtimeGateway
       this.disconnectUnauthorized(client, 'Invalid or expired token.');
       return undefined;
     }
+  }
+
+  private async resolveHeaderSessionUser(
+    client: Socket
+  ): Promise<RequestUser | undefined> {
+    const headerUserId = this.toFirstString(
+      client.handshake.headers['x-transporter-user-id']
+    );
+    const authUserId = this.toFirstString(client.handshake.auth?.['userId']);
+    const queryUserId = this.toFirstString(client.handshake.query['userId']);
+    const userId = headerUserId ?? authUserId ?? queryUserId;
+
+    if (!userId) {
+      return undefined;
+    }
+
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      this.disconnectUnauthorized(client, 'Invalid x-transporter-user-id.');
+      return undefined;
+    }
+
+    return {
+      id: user.id,
+      phone: user.phone,
+      role: user.role
+    };
   }
 
   private async resolveBypassUser(client: Socket): Promise<RequestUser | undefined> {
