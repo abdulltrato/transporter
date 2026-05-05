@@ -1,0 +1,42 @@
+{
+    "name": "codex-cli-vscode",
+    "displayName": "Codex CLI",
+    "publisher": "local",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.60.0"
+    },
+    "main": "./extension.js",
+    "activationEvents": [
+        "onCommand:codex.run"
+    ],
+    "contributes": {
+        "commands": [
+            {
+                "command": "codex.run",
+                "title": "Run Codex (CLI)"
+            }
+        ],
+        "configuration": {
+            "type": "object",
+            "title": "Codex CLI",
+            "properties": {
+                "codex.command": {
+                    "type": "string",
+                    "default": "codex",
+                    "description": "Path to the codex CLI executable."
+                },
+                "codex.args": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Additional arguments to pass to codex (space-separated)."
+                },
+                "codex.useStdin": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Send prompt via stdin instead of CLI args."
+                }
+            }
+        }
+    }
+}

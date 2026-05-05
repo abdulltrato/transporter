@@ -446,6 +446,13 @@ class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
       return envBaseUrl;
     }
 
+    const envApiHost = String.fromEnvironment('TRANSPORTER_API_HOST');
+    const envApiPort = String.fromEnvironment('TRANSPORTER_API_PORT');
+    if (envApiHost.isNotEmpty) {
+      final port = envApiPort.isNotEmpty ? envApiPort : '3000';
+      return 'http://$envApiHost:$port';
+    }
+
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       return 'http://10.0.2.2:3000';
     }

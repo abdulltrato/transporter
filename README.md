@@ -148,6 +148,25 @@ Opcional (forçar API):
 flutter run --dart-define=TRANSPORTER_API_BASE_URL=http://10.0.2.2:3000
 ```
 
+Telemóvel físico por ADB:
+
+```bash
+adb reverse tcp:3000 tcp:3000
+flutter run --dart-define=TRANSPORTER_API_BASE_URL=http://127.0.0.1:3000
+```
+
+Telemóvel físico na mesma rede Wi-Fi:
+
+```bash
+flutter run --dart-define=TRANSPORTER_API_HOST=<IP_DO_PC>
+```
+
+Porta customizada (opcional, default `3000`):
+
+```bash
+flutter run --dart-define=TRANSPORTER_API_HOST=<IP_DO_PC> --dart-define=TRANSPORTER_API_PORT=<PORTA>
+```
+
 ## Contrato de API (Resumo Indispensável)
 
 Base:
@@ -196,7 +215,7 @@ Módulos de API:
 
 Notas:
 - se usar `docker-compose.yml` local, PostgreSQL fica em `localhost:5433`.
-- o `.env.example` ainda usa `5432`; ajustar no `.env` local.
+- o `.env.example` já está alinhado para `5433`.
 
 ## Runbook de Deploy e Rollback (Mínimo)
 

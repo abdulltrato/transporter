@@ -19,7 +19,7 @@ export class DatabaseService
       : process.env.POSTGRES_HOST ?? 'localhost',
     port: process.env.DATABASE_URL
       ? undefined
-      : Number(process.env.POSTGRES_PORT ?? 5432),
+      : Number(process.env.POSTGRES_PORT ?? 5433),
     user: process.env.DATABASE_URL
       ? undefined
       : process.env.POSTGRES_USER ?? 'postgres',
